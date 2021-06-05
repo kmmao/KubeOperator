@@ -41,6 +41,7 @@ func (c *clusterMemberService) Page(clusterName string, num, size int) (*page.Pa
 	err := db.DB.Model(&model.ClusterMember{}).Where("cluster_id = ?", cluster.ID).
 		Preload("User").
 		Count(&pa.Total).
+		Order("created_at desc").
 		Offset((num - 1) * size).
 		Limit(size).
 		Find(&clusterMembers).Error
@@ -117,20 +118,27 @@ func (c *clusterMemberService) Delete(name, clusterName string) error {
 	var (
 		cluster model.Cluster
 		cm      model.ClusterMember
+		pr      model.ProjectResource
 	)
 	user, err := c.userService.Get(name)
 	if err != nil {
 		return err
 	}
-
-	if err := db.DB.Model(model.Project{}).Where("name = ?", clusterName).First(&cluster).Error; err != nil {
+	if err := db.DB.Model(model.Cluster{}).Where("name = ?", clusterName).First(&cluster).Error; err != nil {
 		return err
 	}
-	if err := db.DB.Model(model.ProjectMember{}).Where("cluster_id = ? AND user_id = ?", cluster.ID, user.ID).Find(&cm).Error; err != nil {
+	if err := db.DB.Model(model.ClusterMember{}).Where("cluster_id = ? AND user_id = ?", cluster.ID, user.ID).Find(&cm).Error; err != nil {
 		return err
 	}
 	if err := db.DB.Delete(&cm).Error; err != nil {
 		return err
+	}
+	if err := db.DB.Model(model.ProjectResource{}).Where("resource_id = ? AND resource_type = 'CLUSTER'", cluster.ID).Find(&pr).Error; err != nil {
+		return err
+	}
+	if user.CurrentProjectID == pr.ProjectID {
+		user.User.CurrentProjectID = ""
+		db.DB.Save(&user.User)
 	}
 	return nil
 }

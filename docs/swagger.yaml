@@ -23,8 +23,14 @@ definitions:
         type: string
       credentialVars:
         type: object
+      id:
+        type: string
       name:
         type: string
+      projects:
+        items:
+          type: string
+        type: array
       status:
         type: string
       type:
@@ -40,11 +46,38 @@ definitions:
         type: object
       name:
         type: string
+      projects:
+        items:
+          type: string
+        type: array
       type:
         type: string
     required:
     - bucket
     - credentialVars
+    - name
+    - type
+    type: object
+  dto.BackupAccountUpdate:
+    properties:
+      bucket:
+        type: string
+      credentialVars:
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+      projects:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
+    required:
+    - bucket
+    - credentialVars
+    - id
     - name
     - type
     type: object
@@ -75,13 +108,14 @@ definitions:
         type: integer
       preStatus:
         type: string
+      projectName:
+        type: string
       provider:
         type: string
       source:
         type: string
       spec:
         $ref: '#/definitions/model.ClusterSpec'
-        type: object
       status:
         type: string
       updatedAt:
@@ -105,12 +139,10 @@ definitions:
     properties:
       backupAccount:
         $ref: '#/definitions/model.BackupAccount'
-        type: object
       clusterName:
         type: string
       file:
         $ref: '#/definitions/model.ClusterBackupFile'
-        type: object
       name:
         type: string
     required:
@@ -226,6 +258,53 @@ definitions:
     - name
     - version
     type: object
+  dto.ClusterManifest:
+    properties:
+      coreVars:
+        items:
+          $ref: '#/definitions/dto.NameVersion'
+        type: array
+      isActive:
+        type: boolean
+      name:
+        type: string
+      networkVars:
+        items:
+          $ref: '#/definitions/dto.NameVersion'
+        type: array
+      otherVars:
+        items:
+          $ref: '#/definitions/dto.NameVersion'
+        type: array
+      storageVars:
+        items:
+          $ref: '#/definitions/dto.NameVersion'
+        type: array
+      toolVars:
+        items:
+          $ref: '#/definitions/dto.NameVersion'
+        type: array
+      version:
+        type: string
+    type: object
+  dto.ClusterManifestGroup:
+    properties:
+      clusterManifests:
+        items:
+          $ref: '#/definitions/dto.ClusterManifest'
+        type: array
+      largeVersion:
+        type: string
+    type: object
+  dto.ClusterManifestUpdate:
+    properties:
+      isActive:
+        type: boolean
+      name:
+        type: string
+      version:
+        type: string
+    type: object
   dto.ClusterMemberCreate:
     properties:
       usernames:
@@ -282,6 +361,19 @@ definitions:
     - name
     - type
     - username
+    type: object
+  dto.CredentialOfHostCreate:
+    properties:
+      name:
+        type: string
+      password:
+        type: string
+      privateKey:
+        type: string
+      type:
+        type: string
+      username:
+        type: string
     type: object
   dto.CredentialUpdate:
     properties:
@@ -350,8 +442,7 @@ definitions:
   dto.HostCreate:
     properties:
       credential:
-        $ref: '#/definitions/dto.CredentialCreate'
-        type: object
+        $ref: '#/definitions/dto.CredentialOfHostCreate'
       credentialId:
         type: string
       ip:
@@ -360,10 +451,13 @@ definitions:
         type: string
       port:
         type: integer
+      project:
+        type: string
     required:
     - ip
     - name
     - port
+    - project
     type: object
   dto.Ip:
     properties:
@@ -383,7 +477,6 @@ definitions:
         type: string
       ipPool:
         $ref: '#/definitions/model.IpPool'
-        type: object
       ipPoolId:
         type: string
       status:
@@ -468,6 +561,13 @@ definitions:
       username:
         type: string
     type: object
+  dto.NameVersion:
+    properties:
+      name:
+        type: string
+      version:
+        type: string
+    type: object
   dto.NodeCreate:
     properties:
       hostName:
@@ -487,15 +587,21 @@ definitions:
         type: string
       planVars:
         type: object
-      regionId:
+      projects:
+        items:
+          type: string
+        type: array
+      provider:
         type: string
-      regionName:
+      region:
+        type: string
+      regionId:
         type: string
       updatedAt:
         type: string
       vars:
         type: string
-      zoneNames:
+      zones:
         items:
           type: string
         type: array
@@ -526,13 +632,24 @@ definitions:
     - region
     - zones
     type: object
+  dto.PlanUpdate:
+    properties:
+      planVars:
+        type: object
+      projects:
+        items:
+          type: string
+        type: array
+    required:
+    - planVars
+    - projects
+    type: object
   dto.Profile:
     properties:
       token:
         type: string
       user:
         $ref: '#/definitions/dto.SessionUser'
-        type: object
     type: object
   dto.Project:
     properties:
@@ -697,6 +814,73 @@ definitions:
       userId:
         type: string
     type: object
+  dto.SystemRegistry:
+    properties:
+      architecture:
+        type: string
+      createdAt:
+        type: string
+      hostname:
+        type: string
+      id:
+        type: string
+      protocol:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  dto.SystemRegistryUpdate:
+    properties:
+      hostname:
+        type: string
+      id:
+        type: string
+      protocol:
+        type: string
+    required:
+    - hostname
+    - id
+    - protocol
+    type: object
+  dto.SystemSetting:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      tab:
+        type: string
+      updatedAt:
+        type: string
+      value:
+        type: string
+    type: object
+  dto.SystemSettingCreate:
+    properties:
+      tab:
+        type: string
+      vars:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - tab
+    - vars
+    type: object
+  dto.SystemSettingResult:
+    properties:
+      tab:
+        type: string
+      vars:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - tab
+    - vars
+    type: object
   dto.User:
     properties:
       createdAt:
@@ -812,7 +996,6 @@ definitions:
     properties:
       _:
         $ref: '#/definitions/model.IpPool'
-        type: object
       cloudVars:
         type: object
       createdAt:
@@ -823,7 +1006,6 @@ definitions:
         type: string
       ipPool:
         $ref: '#/definitions/dto.IpPool'
-        type: object
       ipPoolId:
         type: string
       ipPoolName:
@@ -886,6 +1068,8 @@ definitions:
       createdAt:
         type: string
       credential:
+        type: string
+      id:
         type: string
       name:
         type: string
@@ -1121,11 +1305,52 @@ paths:
       summary: Login
       tags:
       - auth
-  /backupAccounts/:
+  /backupAccounts/{name}/:
+    delete:
+      consumes:
+      - application/json
+      description: 删除备份账号
+      parameters:
+      - description: 备份账号名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a backupAccount
+      tags:
+      - backupAccounts
+    patch:
+      consumes:
+      - application/json
+      description: 更新备份账号
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.BackupAccountUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.BackupAccount'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a backupAccount
+      tags:
+      - backupAccounts
+  /backupaccounts/:
     get:
       consumes:
       - application/json
-      description: Show backupAccounts
+      description: 获取备份账号列表
       produces:
       - application/json
       responses:
@@ -1138,33 +1363,10 @@ paths:
       summary: Show all backupAccounts
       tags:
       - backupAccounts
-    patch:
-      consumes:
-      - application/json
-      description: Update a credential
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CredentialUpdate'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.Credential'
-      security:
-      - ApiKeyAuth: []
-      summary: Update a credential
-      tags:
-      - credentials
     post:
       consumes:
       - application/json
-      description: create a backupAccount
+      description: 创建备份账号
       parameters:
       - description: request
         in: body
@@ -1184,39 +1386,28 @@ paths:
       summary: Create a backupAccount
       tags:
       - backupAccounts
-  /backupAccounts/{name}/:
-    delete:
+  /backupaccounts/search:
+    post:
       consumes:
       - application/json
-      description: delete a  backupAccount by name
-      produces:
-      - application/json
-      security:
-      - ApiKeyAuth: []
-      summary: Delete a backupAccount
-      tags:
-      - backupAccounts
-    patch:
-      consumes:
-      - application/json
-      description: Update a backupAccount
+      description: 过滤备份账号
       parameters:
-      - description: request
+      - description: conditions
         in: body
-        name: request
+        name: conditions
         required: true
         schema:
-          $ref: '#/definitions/dto.BackupAccountRequest'
+          $ref: '#/definitions/condition.Conditions'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/dto.BackupAccount'
+            $ref: '#/definitions/page.Page'
       security:
       - ApiKeyAuth: []
-      summary: Update a backupAccount
+      summary: Search backupAccount
       tags:
       - backupAccounts
   /cluster/backup/files/:
@@ -1263,7 +1454,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200": {}
+        "200":
+          description: ""
       security:
       - ApiKeyAuth: []
       summary: Backup CLuster
@@ -1284,7 +1476,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200": {}
+        "200":
+          description: ""
       security:
       - ApiKeyAuth: []
       summary: Restore CLuster
@@ -1463,10 +1656,33 @@ paths:
       summary: Show all credentials
       tags:
       - credentials
+    patch:
+      consumes:
+      - application/json
+      description: 更新单个凭据
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CredentialUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Credential'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a credential
+      tags:
+      - credentials
     post:
       consumes:
       - application/json
-      description: create a credential
+      description: 创建一个凭据
       parameters:
       - description: request
         in: body
@@ -1486,25 +1702,37 @@ paths:
       summary: Create a credential
       tags:
       - credentials
+  /credentials/{name}/:
+    delete:
+      consumes:
+      - application/json
+      description: 通过名称删除单个凭据
+      produces:
+      - application/json
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a credential
+      tags:
+      - credentials
   /credentials/search:
     post:
       consumes:
       - application/json
-      description: Search  credential
+      description: 过滤凭据
       parameters:
-      - description: request
+      - description: conditions
         in: body
-        name: request
+        name: conditions
         required: true
         schema:
-          $ref: '#/definitions/dto.CredentialCreate'
+          $ref: '#/definitions/condition.Conditions'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/dto.Credential'
+            $ref: '#/definitions/page.Page'
       security:
       - ApiKeyAuth: []
       summary: Search credential
@@ -1642,6 +1870,35 @@ paths:
       summary: Create a IpPool
       tags:
       - ippools
+  /ippools/{ipPoolName}/ips/{name}:
+    patch:
+      consumes:
+      - application/json
+      description: 更新 Ip
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.IpUpdate'
+      - description: IP池名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Ip'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a Ip
+      tags:
+      - ips
   /ippools/{name}:
     delete:
       consumes:
@@ -1703,34 +1960,6 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Show ips by ipPoolName
-      tags:
-      - ips
-    patch:
-      consumes:
-      - application/json
-      description: 更新 Ip
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.IpUpdate'
-      - description: IP池名称
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.Ip'
-      security:
-      - ApiKeyAuth: []
-      summary: Update a Ip
       tags:
       - ips
     post:
@@ -1833,10 +2062,17 @@ paths:
       tags:
       - ippools
   /logs/:
-    get:
+    post:
       consumes:
       - application/json
-      description: Show system_logs
+      description: 过滤系统日志
+      parameters:
+      - description: conditions
+        in: body
+        name: conditions
+        required: true
+        schema:
+          $ref: '#/definitions/condition.Conditions'
       produces:
       - application/json
       responses:
@@ -1846,9 +2082,57 @@ paths:
             $ref: '#/definitions/page.Page'
       security:
       - ApiKeyAuth: []
-      summary: Show all system_logs
+      summary: Search user
       tags:
       - system_logs
+  /manifest:
+    get:
+      consumes:
+      - application/json
+      description: 获取Kubernetes版本列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.ClusterManifestGroup'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Show all manifest
+      tags:
+      - manifest
+  /manifest/{name}:
+    patch:
+      consumes:
+      - application/json
+      description: 更新 Kubernetes 版本状态
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ClusterManifestUpdate'
+      - description: Kubernetes 版本
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ClusterManifestUpdate'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a manifest
+      tags:
+      - manifest
   /plans:
     get:
       consumes:
@@ -1921,6 +2205,34 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Show a Plan
+      tags:
+      - plans
+    patch:
+      consumes:
+      - application/json
+      description: 更新部署计划
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.PlanUpdate'
+      - description: 部署计划名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Plan'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a plan
       tags:
       - plans
   /plans/search:
@@ -2001,7 +2313,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200": {}
+        "200":
+          description: ""
       security:
       - ApiKeyAuth: []
       summary: Delete a project
@@ -2569,6 +2882,236 @@ paths:
       summary: Search regions
       tags:
       - regions
+  /settings:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有系统配置信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemSettingResult'
+      security:
+      - ApiKeyAuth: []
+      summary: Show all SystemSettings
+      tags:
+      - SystemSetting
+    post:
+      consumes:
+      - application/json
+      description: 创建一项配置
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SystemSettingCreate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.SystemSetting'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Create a SystemSetting
+      tags:
+      - SystemSetting
+  /settings/{name}:
+    get:
+      consumes:
+      - application/json
+      description: 获取单个应用配置的配置信息
+      parameters:
+      - description: 应用名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemSettingResult'
+      security:
+      - ApiKeyAuth: []
+      summary: Show a SystemSettings
+      tags:
+      - SystemSetting
+  /settings/check/{name}:
+    post:
+      consumes:
+      - application/json
+      description: 检查配置是否可用
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SystemSettingCreate'
+      - description: 应用名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.SystemSetting'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Check a SystemSetting
+      tags:
+      - SystemSetting
+  /settings/registry:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有仓库信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/page.Page'
+      security:
+      - ApiKeyAuth: []
+      summary: Show all Registry
+      tags:
+      - SystemSetting
+    post:
+      consumes:
+      - application/json
+      description: 创建仓库配置
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SystemSettingCreate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemRegistry'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a Registry
+      tags:
+      - SystemSetting
+  /settings/registry/{arch}:
+    patch:
+      consumes:
+      - application/json
+      description: 更新仓库配置
+      parameters:
+      - description: request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SystemRegistryUpdate'
+      - description: CPU 架构
+        in: path
+        name: arch
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemRegistry'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a Registry
+      tags:
+      - SystemSetting
+  /settings/registry/{arch}/:
+    delete:
+      consumes:
+      - application/json
+      description: delete a  Registry by arch
+      parameters:
+      - description: CPU 架构
+        in: path
+        name: arch
+        required: true
+        type: string
+      produces:
+      - application/json
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a Registry
+      tags:
+      - SystemSetting
+  /settings/registry/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据 ID 获取仓库信息
+      parameters:
+      - description: ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemRegistry'
+      security:
+      - ApiKeyAuth: []
+      summary: Show a Registry
+      tags:
+      - SystemSetting
+  /settings/registry/search:
+    post:
+      consumes:
+      - application/json
+      description: 过滤仓库
+      parameters:
+      - description: conditions
+        in: body
+        name: conditions
+        required: true
+        schema:
+          $ref: '#/definitions/condition.Conditions'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/page.Page'
+      security:
+      - ApiKeyAuth: []
+      summary: Search  Registry
+      tags:
+      - SystemSetting
   /users:
     get:
       consumes:

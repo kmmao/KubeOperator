@@ -42,7 +42,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.0 // indirect
 	github.com/imkira/go-interpol v1.1.0 // indirect
-	github.com/iris-contrib/jade v1.1.4 // indirect
+	github.com/iris-contrib/jade v1.1.4
 	github.com/iris-contrib/middleware/jwt v0.0.0-20191219204441-78279b78a367
 	github.com/iris-contrib/schema v0.0.6 // indirect
 	github.com/iris-contrib/swagger/v12 v12.0.1
@@ -51,6 +51,8 @@ require (
 	github.com/kataras/golog v0.1.7 // indirect
 	github.com/kataras/iris/v12 v12.1.8
 	github.com/klauspost/compress v1.11.13 // indirect
+	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
+	github.com/lestrrat-go/strftime v1.0.4 // indirect
 	github.com/mailru/easyjson v0.7.1 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.6 // indirect

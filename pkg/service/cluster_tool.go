@@ -7,10 +7,10 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
 	"github.com/KubeOperator/KubeOperator/pkg/dto"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	"github.com/KubeOperator/KubeOperator/pkg/model"
 	"github.com/KubeOperator/KubeOperator/pkg/repository"
 	"github.com/KubeOperator/KubeOperator/pkg/service/cluster/tools"
-	"github.com/KubeOperator/KubeOperator/pkg/util/kubernetes"
 	kubernetesUtil "github.com/KubeOperator/KubeOperator/pkg/util/kubernetes"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,9 +167,11 @@ func (c clusterToolService) Upgrade(clusterName string, tool dto.ClusterTool) (d
 func (c clusterToolService) doInstall(p tools.Interface, tool *model.ClusterTool, toolDetail model.ClusterToolDetail) {
 	err := p.Install(toolDetail)
 	if err != nil {
+		logger.Log.Errorf("install tool %s failed: %+v", tool.Name, err)
 		tool.Status = constant.ClusterFailed
 		tool.Message = err.Error()
 	} else {
+		logger.Log.Infof("install tool %s successful: %+v", tool.Name, err)
 		tool.Status = constant.ClusterRunning
 	}
 	_ = c.toolRepo.Save(tool)
@@ -178,9 +180,11 @@ func (c clusterToolService) doInstall(p tools.Interface, tool *model.ClusterTool
 func (c clusterToolService) doUpgrade(p tools.Interface, tool *model.ClusterTool, toolDetail model.ClusterToolDetail) {
 	err := p.Upgrade(toolDetail)
 	if err != nil {
+		logger.Log.Errorf("upgrade tool %s failed: %+v", tool.Name, err)
 		tool.Status = constant.ClusterFailed
 		tool.Message = err.Error()
 	} else {
+		logger.Log.Infof("upgrade tool %s successful: %+v", tool.Name, err)
 		tool.Status = constant.ClusterRunning
 	}
 	_ = c.toolRepo.Save(tool)
@@ -188,7 +192,9 @@ func (c clusterToolService) doUpgrade(p tools.Interface, tool *model.ClusterTool
 
 func (c clusterToolService) doUninstall(p tools.Interface, tool *model.ClusterTool) {
 	if err := p.Uninstall(); err != nil {
-		log.Errorf("do uninstall tool-%s failed, error: %s", tool.Name, err.Error())
+		logger.Log.Errorf("uninstall %s failed: %+v", tool.Name, err)
+	} else {
+		logger.Log.Infof("uninstall tool %s successful: %+v", tool.Name, err)
 	}
 	tool.Status = constant.ClusterWaiting
 	_ = c.toolRepo.Save(tool)
@@ -216,10 +222,10 @@ func (c clusterToolService) getNamespace(clusterID string, tool dto.ClusterTool)
 	}
 }
 
-func (c clusterToolService) getBaseParams(clusterName string) (dto.Cluster, []kubernetes.Host, dto.ClusterSecret, error) {
+func (c clusterToolService) getBaseParams(clusterName string) (dto.Cluster, []kubernetesUtil.Host, dto.ClusterSecret, error) {
 	var (
 		cluster dto.Cluster
-		host    []kubernetes.Host
+		host    []kubernetesUtil.Host
 		secret  dto.ClusterSecret
 		err     error
 	)

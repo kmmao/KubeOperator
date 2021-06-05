@@ -11,9 +11,11 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
 	"github.com/KubeOperator/KubeOperator/pkg/dto"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	"github.com/KubeOperator/KubeOperator/pkg/model"
 	"github.com/KubeOperator/KubeOperator/pkg/repository"
 	kubeUtil "github.com/KubeOperator/KubeOperator/pkg/util/kubernetes"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -38,17 +40,16 @@ func NewClusterImportService() *clusterImportService {
 }
 
 func (c clusterImportService) Import(clusterImport dto.ClusterImport) error {
+	loginfo, _ := json.Marshal(clusterImport)
+	logger.Log.WithFields(logrus.Fields{"cluster_import_info": string(loginfo)}).Debugf("start to import the cluster %s", clusterImport.Name)
+
 	var address string
 	var port int
 	if strings.HasSuffix(clusterImport.ApiServer, "/") {
 		clusterImport.ApiServer = strings.Replace(clusterImport.ApiServer, "/", "", -1)
 	}
-	if strings.Contains(clusterImport.ApiServer, "http://") {
-		clusterImport.ApiServer = strings.Replace(clusterImport.ApiServer, "http://", "", -1)
-	}
-	if strings.Contains(clusterImport.ApiServer, "https://") {
-		clusterImport.ApiServer = strings.Replace(clusterImport.ApiServer, "https://", "", -1)
-	}
+	clusterImport.ApiServer = strings.Replace(clusterImport.ApiServer, "http://", "", -1)
+	clusterImport.ApiServer = strings.Replace(clusterImport.ApiServer, "https://", "", -1)
 	if strings.Contains(clusterImport.ApiServer, ":") {
 		strs := strings.Split(clusterImport.ApiServer, ":")
 		address = strs[0]
@@ -96,12 +97,12 @@ func (c clusterImportService) Import(clusterImport dto.ClusterImport) error {
 
 	if err := gatherClusterInfo(&cluster); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("can not  gather cluster info %s", err.Error())
+		return err
 	}
 
 	if err := tx.Save(&cluster.Spec).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("can not  update spec %s", err.Error())
+		return fmt.Errorf("can not update spec %s", err.Error())
 	}
 	for _, node := range cluster.Nodes {
 		node.ClusterID = cluster.ID
@@ -144,19 +145,19 @@ func (c clusterImportService) Import(clusterImport dto.ClusterImport) error {
 			return fmt.Errorf("can not save istio %s", err.Error())
 		}
 	}
-	tx.Commit()
 	project, err := c.projectRepository.Get(clusterImport.ProjectName)
 	if err != nil {
 		return err
-
 	}
 	if err := c.projectResourceRepository.Create(model.ProjectResource{
 		ResourceID:   cluster.ID,
 		ProjectID:    project.ID,
 		ResourceType: constant.ResourceCluster,
 	}); err != nil {
-		return err
+		tx.Rollback()
+		return fmt.Errorf("can not create project resource %s", err.Error())
 	}
+	tx.Commit()
 	return nil
 }
 
@@ -194,7 +195,7 @@ func getServerVersion(cluster *model.Cluster, client *kubernetes.Clientset, wg *
 	defer wg.Done()
 	v, err := client.ServerVersion()
 	if err != nil {
-		log.Error(err.Error())
+		logger.Log.Error(err.Error())
 		return
 	}
 	cluster.Spec.Version = v.GitVersion
@@ -204,7 +205,7 @@ func getKubeNodes(cluster *model.Cluster, client *kubernetes.Clientset, wg *sync
 	defer wg.Done()
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Error(err.Error())
+		logger.Log.Error(err.Error())
 		return
 	}
 	for _, node := range nodes.Items {
@@ -230,7 +231,7 @@ func getNetworkType(cluster *model.Cluster, client *kubernetes.Clientset, wg *sy
 	defer wg.Done()
 	dps, err := client.AppsV1().DaemonSets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Error(err.Error())
+		logger.Log.Error(err.Error())
 		return
 	}
 	networkMap := map[string]int{
@@ -261,7 +262,7 @@ func getRuntimeType(cluster *model.Cluster, client *kubernetes.Clientset, wg *sy
 	defer wg.Done()
 	ns, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Error(err.Error())
+		logger.Log.Error(err.Error())
 		return
 	}
 	var node v1.Node

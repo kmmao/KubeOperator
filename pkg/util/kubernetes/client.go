@@ -2,12 +2,14 @@ package kubernetes
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	"github.com/KubeOperator/KubeOperator/pkg/util/net"
+	"github.com/pkg/errors"
 	extensionClientSet "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sync"
 )
 
 type Host string
@@ -16,8 +18,6 @@ type Config struct {
 	Hosts []Host
 	Token string
 }
-
-var log = logger.Default
 
 func NewKubernetesClient(c *Config) (*kubernetes.Clientset, error) {
 	var aliveHost Host
@@ -32,7 +32,11 @@ func NewKubernetesClient(c *Config) (*kubernetes.Clientset, error) {
 			Insecure: true,
 		},
 	}
-	return kubernetes.NewForConfig(kubeConf)
+	client, err := kubernetes.NewForConfig(kubeConf)
+	if err != nil {
+		return client, errors.Wrap(err, fmt.Sprintf("new kubernetes client with config failed: %v", err))
+	}
+	return client, nil
 }
 
 func NewKubernetesExtensionClient(c *Config) (*extensionClientSet.Clientset, error) {
@@ -48,11 +52,15 @@ func NewKubernetesExtensionClient(c *Config) (*extensionClientSet.Clientset, err
 			Insecure: true,
 		},
 	}
-	return extensionClientSet.NewForConfig(kubeConf)
+	client, err := extensionClientSet.NewForConfig(kubeConf)
+	if err != nil {
+		return client, errors.Wrap(err, fmt.Sprintf("new extension kubernetes client with config failed: %v", err))
+	}
+	return client, nil
 }
 func SelectAliveHost(hosts []Host) (Host, error) {
 	var aliveHost Host
-	aliveHostCh := make(chan Host,len(hosts)+1)
+	aliveHostCh := make(chan Host, len(hosts)+1)
 	wg := &sync.WaitGroup{}
 	for i := range hosts {
 		wg.Add(1)
@@ -60,19 +68,19 @@ func SelectAliveHost(hosts []Host) (Host, error) {
 			defer wg.Done()
 			err := net.TcpPing(string(h), true)
 			if err != nil {
-				log.Warnf("dial host %s error %s",h, err.Error())
+				logger.Log.Warnf("dial host %s falied: %+v", h, err)
 				return
 			}
-			aliveHostCh <-h
+			aliveHostCh <- h
 		}(hosts[i])
 	}
 	go func() {
 		wg.Wait()
 		aliveHostCh <- ""
 	}()
-	aliveHost=<-aliveHostCh
-	if aliveHost==""{
-		return "", fmt.Errorf("no alive host in %v", hosts)
+	aliveHost = <-aliveHostCh
+	if aliveHost == "" {
+		return "", errors.Wrap(errors.New("no alive host"), "")
 	}
 	return aliveHost, nil
 }

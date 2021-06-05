@@ -98,17 +98,15 @@ func (s *SessionController) Delete() error {
 	return nil
 }
 
-//TODO: 报错信息没有翻译
-
 func (s *SessionController) Get() (*dto.Profile, error) {
 	session := constant.Sess.Start(s.Ctx)
 	user := session.Get(constant.SessionUserKey)
 	if user == nil {
-		return nil, errors.New("")
+		return nil, errors.New("SESSION_KEY_NOT_FOUND")
 	}
 	p, ok := user.(*dto.Profile)
 	if !ok {
-		return nil, errors.New("")
+		return nil, errors.New("USER_PROFILE_INVALID")
 	}
 	// 重新查询用户,被删除的用户要退出登陆
 	var mo model.User
@@ -206,15 +204,16 @@ func getUserRole(user *model.User) ([]string, error) {
 				return nil, err
 			}
 			if gorm.IsRecordNotFoundError(err) {
-				return nil, errors.New("no resource")
+				return nil, errors.New("USER_HAS_NO_RESOURCE")
 			}
-			err = db.DB.Model(&model.ProjectMember{}).Where("cluster_id = ?", clusterMember.ClusterID).Preload("Project").First(&projectMember).Error
+			var projectResource model.ProjectResource
+			err = db.DB.Model(&model.ProjectResource{}).Where("resource_id = ?", clusterMember.ClusterID).Preload("Project").First(&projectResource).Error
 			if err != nil {
 				return nil, err
 			}
-			if projectMember.Project.Name != "" {
-				user.CurrentProject = projectMember.Project
-				user.CurrentProjectID = projectMember.Project.ID
+			if projectResource.Project.Name != "" {
+				user.CurrentProject = projectResource.Project
+				user.CurrentProjectID = projectResource.Project.ID
 				db.DB.Save(user)
 			}
 			return []string{constant.RoleClusterManager}, nil
@@ -248,7 +247,7 @@ func getUserRole(user *model.User) ([]string, error) {
 				return nil, err
 			}
 			if gorm.IsRecordNotFoundError(err) {
-				return nil, errors.New("no resource")
+				return nil, errors.New("USER_HAS_NO_RESOURCE")
 			}
 			return []string{constant.RoleClusterManager}, nil
 		}

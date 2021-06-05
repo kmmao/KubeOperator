@@ -3,6 +3,9 @@ package model
 import (
 	"errors"
 
+	"github.com/iris-contrib/jade/testdata/imp/model"
+	"github.com/jinzhu/gorm"
+
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
 	"github.com/KubeOperator/KubeOperator/pkg/model/common"
@@ -33,7 +36,7 @@ func (p *Project) BeforeDelete() (err error) {
 	}
 	var projectResources []ProjectResource
 	err = db.DB.Model(ProjectResource{}).Where(ProjectResource{ProjectID: p.ID, ResourceType: constant.ResourceCluster}).Find(&projectResources).Error
-	if err != nil {
+	if err != nil && !gorm.IsRecordNotFoundError(err) {
 		return err
 	}
 	if len(projectResources) > 0 {
@@ -49,6 +52,10 @@ func (p *Project) BeforeDelete() (err error) {
 		if err != nil {
 			return err
 		}
+	}
+	err = db.DB.Model(model.User{}).Where("current_project_id = ?", p.ID).Updates(&User{CurrentProjectID: ""}).Error
+	if err != nil {
+		return err
 	}
 	return err
 }

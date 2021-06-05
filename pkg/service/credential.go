@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/page"
@@ -14,10 +15,7 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/util/encrypt"
 )
 
-var (
-	hostIsNotNull       = "delete credential error, there are some hosts use this key"
-	CredentialNameExist = "NAME_EXISTS"
-)
+var CredentialNameExist = "NAME_EXISTS"
 
 type CredentialService interface {
 	Get(name string) (dto.Credential, error)
@@ -173,19 +171,7 @@ func (c credentialService) Update(name string, update dto.CredentialUpdate) (*dt
 }
 
 func (c credentialService) Delete(name string) error {
-
-	credential, err := c.Get(name)
-	if err != nil {
-		return err
-	}
-	hosts, err := c.hostRepo.ListByCredentialID(credential.ID)
-	if err != nil {
-		return err
-	}
-	if len(hosts) > 0 {
-		return errors.New(hostIsNotNull)
-	}
-	err = c.credentialRepo.Delete(name)
+	err := c.credentialRepo.Delete(name)
 	if err != nil {
 		return err
 	}

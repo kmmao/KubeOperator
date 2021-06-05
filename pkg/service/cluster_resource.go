@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/page"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
@@ -13,6 +14,7 @@ import (
 
 type ClusterResourceService interface {
 	Page(num, size int, clusterName, resourceType string) (*page.Page, error)
+	List(clusterName string, resourceType string) (interface{}, error)
 	Create(clusterName string, request dto.ClusterResourceCreate) ([]dto.ClusterResource, error)
 	GetResources(resourceType, projectName, clusterName string) (interface{}, error)
 	Delete(name, resourceType, clusterName string) error
@@ -53,7 +55,7 @@ func (c clusterResourceService) Page(num, size int, clusterName, resourceType st
 	switch resourceType {
 	case constant.ResourceHost:
 		var hosts []model.Host
-		if err := db.DB.Where("id in (?)", resourceIds).Preload("Cluster").Preload("Zone").Find(&hosts).Error; err != nil {
+		if err := db.DB.Where("id in (?)", resourceIds).Preload("Cluster").Preload("Zone").Order("created_at desc").Find(&hosts).Error; err != nil {
 			return nil, err
 		}
 		var result []dto.Host
@@ -68,13 +70,13 @@ func (c clusterResourceService) Page(num, size int, clusterName, resourceType st
 		p.Items = result
 	case constant.ResourcePlan:
 		var result []model.Plan
-		if err := db.DB.Where("id in (?)", resourceIds).Find(&result).Error; err != nil {
+		if err := db.DB.Where("id in (?)", resourceIds).Order("created_at desc").Find(&result).Error; err != nil {
 			return nil, err
 		}
 		p.Items = result
 	case constant.ResourceBackupAccount:
 		var result []model.BackupAccount
-		if err := db.DB.Where("id in (?)", resourceIds).Find(&result).Error; err != nil {
+		if err := db.DB.Where("id in (?)", resourceIds).Order("created_at desc").Find(&result).Error; err != nil {
 			return nil, err
 		}
 		p.Items = result
@@ -82,6 +84,63 @@ func (c clusterResourceService) Page(num, size int, clusterName, resourceType st
 		return nil, nil
 	}
 	return &p, nil
+}
+
+func (c clusterResourceService) List(clusterName string, resourceType string) (interface{}, error) {
+	var (
+		cluster          model.Cluster
+		clusterResources []model.ClusterResource
+		resourceIds      []string
+		resources        interface{}
+	)
+	if err := db.DB.Where("name = ?", clusterName).First(&cluster).Error; err != nil {
+		return nil, err
+	}
+	if err := db.DB.Model(&model.ClusterResource{}).
+		Where("cluster_id = ? AND resource_type= ?", cluster.ID, resourceType).
+		Find(&clusterResources).Error; err != nil {
+		return nil, err
+	}
+	for _, mo := range clusterResources {
+		resourceIds = append(resourceIds, mo.ResourceID)
+	}
+
+	if len(resourceIds) == 0 {
+		resourceIds = append(resourceIds, "1")
+	}
+
+	switch resourceType {
+	case constant.ResourceHost:
+		var hosts []model.Host
+		if err := db.DB.Where("id in (?)", resourceIds).Preload("Cluster").Preload("Zone").Order("created_at desc").Find(&hosts).Error; err != nil {
+			return nil, err
+		}
+		var result []dto.Host
+		for _, mo := range hosts {
+			hostDTO := dto.Host{
+				Host:        mo,
+				ClusterName: mo.Cluster.Name,
+				ZoneName:    mo.Zone.Name,
+			}
+			result = append(result, hostDTO)
+		}
+		resources = result
+	case constant.ResourcePlan:
+		var result []model.Plan
+		if err := db.DB.Where("id in (?)", resourceIds).Order("created_at desc").Find(&result).Error; err != nil {
+			return nil, err
+		}
+		resources = result
+	case constant.ResourceBackupAccount:
+		var result []model.BackupAccount
+		if err := db.DB.Where("id in (?)", resourceIds).Order("created_at desc").Find(&result).Error; err != nil {
+			return nil, err
+		}
+		resources = result
+	default:
+		return nil, nil
+	}
+	return resources, nil
 }
 
 func (c clusterResourceService) Create(clusterName string, request dto.ClusterResourceCreate) ([]dto.ClusterResource, error) {
@@ -171,6 +230,9 @@ func (c clusterResourceService) Delete(name, resourceType, clusterName string) e
 		if err := db.DB.Model(model.Host{}).Where("name = ?", name).Find(&host).Error; err != nil {
 			return err
 		} else {
+			if host.ClusterID != "" {
+				return errors.New("DELETE_HOST_FAILED")
+			}
 			resourceId = host.ID
 		}
 	} else if resourceType == constant.ResourceBackupAccount {
@@ -256,8 +318,8 @@ func deleteCheck(resourceName, resourceType, clusterName string) error {
 
 	resourceTypes := []string{constant.ResourceHost, constant.ResourceBackupAccount}
 	result := false
-	for _, resourceType := range resourceTypes {
-		if resourceType == resourceType {
+	for _, res := range resourceTypes {
+		if res == resourceType {
 			result = true
 			break
 		}

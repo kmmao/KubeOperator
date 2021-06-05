@@ -109,6 +109,9 @@ func (i IpController) Post() error {
 	if err != nil {
 		return err
 	}
+	operator := i.Ctx.Values().GetString("operator")
+	go kolog.Save(operator, constant.CREATE_IP, req.IpStart+"-"+req.IpEnd)
+
 	return i.IpService.Create(req, nil)
 }
 
@@ -123,6 +126,14 @@ func (i IpController) PostBatch() error {
 	if err != nil {
 		return err
 	}
+
+	operator := i.Ctx.Values().GetString("operator")
+	ips := ""
+	for _, ip := range req.Items {
+		ips += (ip.Address + ",")
+	}
+	go kolog.Save(operator, constant.DELETE_IP, ips)
+
 	return i.IpService.Batch(req)
 }
 
@@ -136,8 +147,8 @@ func (i IpController) PostBatch() error {
 // @Param name path string true "IP池名称"
 // @Success 200 {object} dto.Ip
 // @Security ApiKeyAuth
-// @Router /ippools/{name}/ips  [patch]
-func (i IpController) Patch() (*dto.Ip, error) {
+// @Router /ippools/{ipPoolName}/ips/{name}  [patch]
+func (i IpController) PatchBy(name string) (*dto.Ip, error) {
 	var req dto.IpUpdate
 	err := i.Ctx.ReadJSON(&req)
 	if err != nil {
@@ -148,7 +159,7 @@ func (i IpController) Patch() (*dto.Ip, error) {
 	if err != nil {
 		return nil, err
 	}
-	return i.IpService.Update(req)
+	return i.IpService.Update(name, req)
 }
 
 func (i IpController) PatchSync() error {

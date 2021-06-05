@@ -10,8 +10,6 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/service"
 )
 
-var log = logger.Default
-
 type RefreshHostInfo struct {
 	hostService service.HostService
 }
@@ -36,10 +34,9 @@ func (r *RefreshHostInfo) Run() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			log.Infof("gather host [%s] info", name)
 			_, err := r.hostService.Sync(name)
 			if err != nil {
-				log.Errorf("gather host info error: %s", err.Error())
+				logger.Log.Errorf("gather host info error: %s", err.Error())
 			}
 		}(host.Name)
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 	"github.com/KubeOperator/KubeOperator/pkg/util/encrypt"
 
@@ -47,6 +48,7 @@ type hostService struct {
 	hostRepo          repository.HostRepository
 	credentialRepo    repository.CredentialRepository
 	credentialService CredentialService
+	projectRepository repository.ProjectRepository
 }
 
 func NewHostService() HostService {
@@ -54,6 +56,7 @@ func NewHostService() HostService {
 		hostRepo:          repository.NewHostRepository(),
 		credentialRepo:    repository.NewCredentialRepository(),
 		credentialService: NewCredentialService(),
+		projectRepository: repository.NewProjectRepository(),
 	}
 }
 
@@ -82,51 +85,94 @@ func (h *hostService) Get(name string) (*dto.Host, error) {
 
 func (h *hostService) List(projectName string, conditions condition.Conditions) ([]dto.Host, error) {
 	var (
-		mos      []model.Host
-		hostDTOs []dto.Host
+		mos       []model.Host
+		hostDTOs  []dto.Host
+		projects  []model.Project
+		resources []model.ProjectResource
 	)
 
 	d := db.DB.Model(model.Host{})
 	if err := dbUtil.WithConditions(&d, model.Host{}, conditions); err != nil {
-		return nil, err
+		return hostDTOs, nil
 	}
-	if projectName != "" {
-		if err := dbUtil.WithProjectResource(&d, projectName, constant.ResourceHost); err != nil {
-			return nil, err
+
+	if len(projectName) != 0 {
+		res, err := dbUtil.WithProjectResource(&d, projectName, constant.ResourceHost)
+		if err != nil {
+			return hostDTOs, nil
+		}
+		resources = res[:]
+	} else {
+		if err := db.DB.Where(model.ProjectResource{ResourceType: constant.ResourceHost}).Find(&resources).Error; err != nil {
+			return hostDTOs, nil
 		}
 	}
+
 	if err := d.
 		Preload("Volumes").
 		Preload("Cluster").
 		Preload("Zone").
 		Find(&mos).Error; err != nil {
-		return nil, err
+		return hostDTOs, nil
 	}
+	if err := db.DB.Find(&projects).Error; err != nil {
+		return hostDTOs, nil
+	}
+
 	for _, mo := range mos {
-		hostDTOs = append(hostDTOs, dto.Host{
-			Host:        mo,
-			ClusterName: mo.Cluster.Name,
-			ZoneName:    mo.Zone.Name,
-		})
+		isExist := false
+		for _, res := range resources {
+			if mo.ID == res.ResourceID {
+				isExist = true
+				for _, pro := range projects {
+					if pro.ID == res.ProjectID {
+						hostDTOs = append(hostDTOs, dto.Host{
+							Host:        mo,
+							ProjectName: pro.Name,
+							ClusterName: mo.Cluster.Name,
+							ZoneName:    mo.Zone.Name,
+						})
+						break
+					}
+				}
+				break
+			}
+		}
+		if !isExist {
+			hostDTOs = append(hostDTOs, dto.Host{
+				Host:        mo,
+				ClusterName: mo.Cluster.Name,
+				ZoneName:    mo.Zone.Name,
+			})
+		}
 	}
 	return hostDTOs, nil
 }
 
 func (h *hostService) Page(num, size int, projectName string, conditions condition.Conditions) (*page.Page, error) {
 	var (
-		p        page.Page
-		hostDTOs []dto.Host
-		mos      []model.Host
+		p         page.Page
+		hostDTOs  []dto.Host
+		mos       []model.Host
+		projects  []model.Project
+		resources []model.ProjectResource
 	)
 	d := db.DB.Model(model.Host{})
 	if err := dbUtil.WithConditions(&d, model.Host{}, conditions); err != nil {
-		return nil, err
+		return &p, err
 	}
-	if projectName != "" {
-		if err := dbUtil.WithProjectResource(&d, projectName, constant.ResourceHost); err != nil {
+	if len(projectName) != 0 {
+		res, err := dbUtil.WithProjectResource(&d, projectName, constant.ResourceHost)
+		if err != nil {
 			return nil, err
 		}
+		resources = res[:]
+	} else {
+		if err := db.DB.Where(model.ProjectResource{ResourceType: constant.ResourceHost}).Find(&resources).Error; err != nil {
+			return &p, err
+		}
 	}
+
 	if err := d.
 		Count(&p.Total).
 		Order("name").
@@ -136,14 +182,39 @@ func (h *hostService) Page(num, size int, projectName string, conditions conditi
 		Preload("Cluster").
 		Preload("Zone").
 		Find(&mos).Error; err != nil {
-		return nil, err
+		return &p, err
 	}
+
+	if err := db.DB.Find(&projects).Error; err != nil {
+		return &p, err
+	}
+
 	for _, mo := range mos {
-		hostDTOs = append(hostDTOs, dto.Host{
-			Host:        mo,
-			ClusterName: mo.Cluster.Name,
-			ZoneName:    mo.Zone.Name,
-		})
+		isExist := false
+		for _, res := range resources {
+			if mo.ID == res.ResourceID {
+				isExist = true
+				for _, pro := range projects {
+					if pro.ID == res.ProjectID {
+						hostDTOs = append(hostDTOs, dto.Host{
+							Host:        mo,
+							ProjectName: pro.Name,
+							ClusterName: mo.Cluster.Name,
+							ZoneName:    mo.Zone.Name,
+						})
+						break
+					}
+				}
+				break
+			}
+		}
+		if !isExist {
+			hostDTOs = append(hostDTOs, dto.Host{
+				Host:        mo,
+				ClusterName: mo.Cluster.Name,
+				ZoneName:    mo.Zone.Name,
+			})
+		}
 	}
 	p.Items = hostDTOs
 	return &p, nil
@@ -162,6 +233,13 @@ func (h *hostService) Delete(name string) error {
 
 func (h *hostService) Create(creation dto.HostCreate) (*dto.Host, error) {
 	tx := db.DB.Begin()
+	var num int
+	if err := db.DB.Model(model.SystemRegistry{}).Where("hostname = ?", creation.Ip).Count(&num).Error; err != nil {
+		return nil, err
+	}
+	if num != 0 {
+		return nil, errors.New("IS_LOCAL_HOST")
+	}
 	var credential model.Credential
 	if creation.CredentialID != "" {
 		if err := db.DB.Where(model.Credential{ID: creation.CredentialID}).First(&credential).Error; err != nil {
@@ -189,6 +267,7 @@ func (h *hostService) Create(creation dto.HostCreate) (*dto.Host, error) {
 		}
 		credential = c
 	}
+
 	host := model.Host{
 		BaseModel:    common.BaseModel{},
 		Name:         creation.Name,
@@ -198,10 +277,24 @@ func (h *hostService) Create(creation dto.HostCreate) (*dto.Host, error) {
 		Credential:   credential,
 		Status:       constant.ClusterInitializing,
 	}
-
 	if err := tx.Create(&host).Error; err != nil {
 		return nil, err
 	}
+
+	var project model.Project
+	if err := tx.Where("name = ?", creation.Project).Find(&project).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&model.ProjectResource{
+		ResourceType: constant.ResourceHost,
+		ResourceID:   host.ID,
+		ProjectID:    project.ID,
+	}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
 	tx.Commit()
 	go h.RunGetHostConfig(&host)
 	return &dto.Host{Host: host}, nil
@@ -216,7 +309,7 @@ func (h *hostService) SyncList(hosts []dto.HostSync) error {
 		}
 		// 先更新所有待同步主机状态
 		if err := db.DB.Model(&model.Host{}).Where("name = ?", host.HostName).Update("status", constant.ClusterSynchronizing).Error; err != nil {
-			log.Errorf("update host status to synchronizing error: %s", err.Error())
+			logger.Log.Errorf("update host status to synchronizing error: %s", err.Error())
 		}
 
 		wg.Add(1)
@@ -224,10 +317,10 @@ func (h *hostService) SyncList(hosts []dto.HostSync) error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			log.Infof("gather host [%s] info", name)
+			logger.Log.Infof("gather host [%s] info", name)
 			_, err := h.Sync(name)
 			if err != nil {
-				log.Errorf("gather host info error: %s", err.Error())
+				logger.Log.Errorf("gather host info error: %s", err.Error())
 			}
 		}(host.HostName)
 	}
@@ -237,21 +330,21 @@ func (h *hostService) SyncList(hosts []dto.HostSync) error {
 func (h *hostService) Sync(name string) (dto.Host, error) {
 	host, err := h.hostRepo.Get(name)
 	if err != nil {
-		log.Errorf("host of %s not found error: %s", name, err.Error())
+		logger.Log.Errorf("host of %s not found error: %s", name, err.Error())
 		return dto.Host{Host: host}, err
 	}
 	if err := h.GetHostConfig(&host); err != nil {
 		host.Status = constant.ClusterFailed
 		host.Message = err.Error()
 		if err := syncHostInfoWithDB(&host); err != nil {
-			log.Errorf("update host info error: %s", err.Error())
+			logger.Log.Errorf("update host info error: %s", err.Error())
 			return dto.Host{Host: host}, err
 		}
 		return dto.Host{Host: host}, err
 	}
 	host.Status = constant.ClusterRunning
 	if err := syncHostInfoWithDB(&host); err != nil {
-		log.Errorf("update host info error: %s", err.Error())
+		logger.Log.Errorf("update host info error: %s", err.Error())
 		return dto.Host{Host: host}, err
 	}
 	return dto.Host{Host: host}, nil
@@ -357,7 +450,7 @@ func (h *hostService) RunGetHostConfig(host *model.Host) {
 func (h *hostService) GetHostConfig(host *model.Host) error {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Error("gather fact error!")
+			logger.Log.Error("gather fact error!")
 		}
 	}()
 
@@ -448,7 +541,7 @@ func (h *hostService) GetHostConfig(host *model.Host) error {
 		var volumes []model.Volume
 		for i := range devices {
 			device := devices[i].(map[string]interface{})
-			if "Virtual disk" == device["model"] {
+			if device["model"] == "Virtual disk" {
 				v := model.Volume{
 					ID:     uuid.NewV4().String(),
 					Name:   "/dev/" + i,
@@ -476,10 +569,11 @@ func (h *hostService) GetHostConfig(host *model.Host) error {
 
 func (h *hostService) DownloadTemplateFile() error {
 	f := excelize.NewFile()
-	f.SetCellValue("Sheet1", "A1", "name")
+	f.SetCellValue("Sheet1", "A1", "name (中文、大小写英文、数字和-)")
 	f.SetCellValue("Sheet1", "B1", "ip")
 	f.SetCellValue("Sheet1", "C1", "port")
 	f.SetCellValue("Sheet1", "D1", "credential (系统设置-凭据中的名称)")
+	f.SetCellValue("Sheet1", "E1", "project (项目-项目名称)")
 	file, err := os.Create("./demo.xlsx")
 	if err != nil {
 		return err
@@ -518,8 +612,13 @@ func (h *hostService) ImportHosts(file []byte) error {
 		if index == 0 {
 			continue
 		}
-		if row[0] == "" || row[1] == "" || row[2] == "" || row[3] == "" {
-			errs = errs.Add(errorf.New("HOST_IMPORT_NULL_VALUE", strconv.Itoa(index)))
+		if len(row) != 5 {
+			errs = errs.Add(errorf.New("HOST_IMPORT_NOT_COMPLETE_VALUE", strconv.Itoa(index)))
+			failedNum++
+			continue
+		}
+		if row[0] == "" || row[1] == "" || row[2] == "" || row[3] == "" || row[4] == "" {
+			errs = errs.Add(errorf.New("HOST_IMPORT_NOT_COMPLETE_VALUE", strconv.Itoa(index)))
 			failedNum++
 			continue
 		}
@@ -535,6 +634,12 @@ func (h *hostService) ImportHosts(file []byte) error {
 			failedNum++
 			continue
 		}
+		project, err := h.projectRepository.Get(row[4])
+		if err != nil {
+			errs = errs.Add(errorf.New("HOST_IMPORT_PROJECT_NOT_FOUND", strconv.Itoa(index)))
+			failedNum++
+			continue
+		}
 		host := model.Host{
 			Name:         strings.Trim(row[0], " "),
 			Ip:           strings.Trim(row[1], " "),
@@ -542,6 +647,7 @@ func (h *hostService) ImportHosts(file []byte) error {
 			CredentialID: credential.ID,
 			Status:       constant.ClusterInitializing,
 			Credential:   credential,
+			ClusterID:    project.ID,
 		}
 		hosts = append(hosts, host)
 	}
@@ -550,9 +656,20 @@ func (h *hostService) ImportHosts(file []byte) error {
 		errs = errs.Add(errorf.New("HOST_IMPORT_FAILED_NUM", strconv.Itoa(failedNum)))
 	}
 
+	itemProjectName := ""
 	for _, host := range hosts {
+		itemProjectName = host.ClusterID
+		host.ClusterID = ""
 		if err := h.hostRepo.Save(&host); err != nil {
 			errs = errs.Add(errorf.New("HOST_IMPORT_FAILED_SAVE", host.Name, err.Error()))
+			continue
+		}
+		if err := db.DB.Create(&model.ProjectResource{
+			ResourceType: constant.ResourceHost,
+			ResourceID:   host.ID,
+			ProjectID:    itemProjectName,
+		}).Error; err != nil {
+			errs = errs.Add(errorf.New("HOST_RESOURCE_FAILED_BIND", host.Name, err.Error()))
 			continue
 		}
 		saveHost := host

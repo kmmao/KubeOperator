@@ -2,10 +2,11 @@ package service
 
 import (
 	"errors"
-	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
-	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 	"strconv"
 	"strings"
+
+	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/page"
@@ -21,7 +22,7 @@ type IpService interface {
 	Create(create dto.IpCreate, tx *gorm.DB) error
 	Page(num, size int, ipPoolName string, conditions condition.Conditions) (*page.Page, error)
 	Batch(op dto.IpOp) error
-	Update(update dto.IpUpdate) (*dto.Ip, error)
+	Update(name string, update dto.IpUpdate) (*dto.Ip, error)
 	Sync(ipPoolName string) error
 	Delete(address string) error
 	List(ipPoolName string, conditions condition.Conditions) ([]dto.Ip, error)
@@ -180,20 +181,18 @@ func (i ipService) Batch(op dto.IpOp) error {
 	return nil
 }
 
-func (i ipService) Update(update dto.IpUpdate) (*dto.Ip, error) {
+func (i ipService) Update(address string, update dto.IpUpdate) (*dto.Ip, error) {
 	tx := db.DB.Begin()
 	var ip model.Ip
-	err := tx.Where("address = ?", update.Address).First(&ip).Error
+	err := tx.Where("address = ?", address).First(&ip).Error
 	if err != nil {
 		return nil, err
 	}
 	switch update.Operation {
 	case "LOCK":
 		ip.Status = constant.IpLock
-		break
 	case "UNLOCK":
 		ip.Status = constant.IpAvailable
-		break
 	default:
 		break
 	}
@@ -228,19 +227,31 @@ func (i ipService) Sync(ipPoolName string) error {
 		return err
 	}
 	for i := range ips {
-		if ips[i].Status != constant.IpUsed && ips[i].Status != constant.IpLock {
-			go func(i int) {
-				err := ipaddr.Ping(ips[i].Address)
-				if err == nil && ips[i].Status != constant.IpReachable {
-					ips[i].Status = constant.IpReachable
-					db.DB.Save(&ips[i])
-				}
-				if err != nil && ips[i].Status == constant.IpReachable {
-					ips[i].Status = constant.IpAvailable
-					db.DB.Save(&ips[i])
-				}
-			}(i)
+		if ips[i].Status == constant.IpLock {
+			continue
 		}
+		var host model.Host
+		db.DB.Model(model.Host{}).Where("ip = ?", ips[i].Address).Find(&host)
+		if host.ID != "" {
+			if ips[i].Status == constant.IpUsed {
+				continue
+			} else {
+				ips[i].Status = constant.IpUsed
+				db.DB.Save(&ips[i])
+				continue
+			}
+		}
+		go func(i int) {
+			err := ipaddr.Ping(ips[i].Address)
+			if err == nil && ips[i].Status != constant.IpReachable {
+				ips[i].Status = constant.IpReachable
+				db.DB.Save(&ips[i])
+			}
+			if err != nil && ips[i].Status == constant.IpReachable {
+				ips[i].Status = constant.IpAvailable
+				db.DB.Save(&ips[i])
+			}
+		}(i)
 	}
 	return nil
 }

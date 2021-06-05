@@ -25,9 +25,12 @@ NO_IP_AVAILABLE: "IP 资源不足"
 IS_LOCAL_HOST: "该主机与仓库 IP 冲突，未能成功添加"
 HOST_IMPORT_ERROR_NULL: "未找到可导入的数据！请检查导入文件！"
 HOST_IMPORT_NULL_VALUE: "%s 行有空数据"
+HOST_IMPORT_NOT_COMPLETE_VALUE: "%s 行数据不完整"
 HOST_IMPORT_WRONG_FORMAT: "%s 行端口格式不正确"
 HOST_IMPORT_CREDENTIAL_NOT_FOUND: "%s 行找不到密钥"
+HOST_IMPORT_PROJECT_NOT_FOUND: "%s 行找不到项目"
 HOST_IMPORT_FAILED_NUM: "共 %s 行数据不正常，跳过"
+HOST_RESOURCE_FAILED_BIND: "主机资源 %s 保存失败，原因：%s"
 HOST_IMPORT_FAILED_SAVE: "主机 %s 保存失败，原因：%s"
 
 
@@ -122,4 +125,11 @@ CLUSTER_PROVIDER_ERROR: "自动模式创建的集群不能手动修改主机资�
 RESOURCE_TYPE_ERROR: "不支持添加的类型！仅支持 HOST,BACKUP_ACCOUNT"
 DELETE_BACKUP_ACCOUNT_FAILED_BY_CLUSTER: "删除失败！该备份账号关联的备份策略在启用中！"
 
+#session
+SESSION_KEY_NOT_FOUND: "session key 无效"
+USER_PROFILE_INVALID: "session 用户转化失败"
+USER_HAS_NO_RESOURCE: "用户没有资源"
 
+
+#storage
+PROVISIONER_EXSIT: "已存在存储提供商"

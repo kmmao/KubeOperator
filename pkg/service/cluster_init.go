@@ -2,15 +2,18 @@ package service
 
 import (
 	"context"
+	"io"
+	"time"
+
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	"github.com/KubeOperator/KubeOperator/pkg/model"
 	"github.com/KubeOperator/KubeOperator/pkg/repository"
 	"github.com/KubeOperator/KubeOperator/pkg/service/cluster/adm"
 	"github.com/KubeOperator/KubeOperator/pkg/util/ansible"
 	clusterUtil "github.com/KubeOperator/KubeOperator/pkg/util/cluster"
 	"github.com/KubeOperator/KubeOperator/pkg/util/ssh"
-	"io"
-	"time"
+	"github.com/sirupsen/logrus"
 )
 
 type ClusterInitService interface {
@@ -69,6 +72,11 @@ func (c clusterInitService) Init(name string) error {
 	}
 	cluster.LogId = logId
 	_ = c.clusterRepo.Save(&cluster)
+
+	logger.Log.WithFields(logrus.Fields{
+		"log_id": logId,
+	}).Debugf("get ansible writer log of cluster %s successful, now start to init the cluster", cluster.Name)
+
 	go c.do(cluster, writer)
 	return nil
 }
@@ -82,6 +90,7 @@ func (c clusterInitService) do(cluster model.Cluster, writer io.Writer) {
 			cluster.Status.Phase = constant.ClusterFailed
 			cluster.Status.Message = err.Error()
 			_ = c.clusterStatusRepo.Save(&cluster.Status)
+			logger.Log.Errorf("init cluster resource for create failed: %s", err.Error())
 			_ = c.messageService.SendMessage(constant.System, false, GetContent(constant.ClusterInstall, false, err.Error()), cluster.Name, constant.ClusterInstall)
 			return
 		}
@@ -100,9 +109,11 @@ func (c clusterInitService) do(cluster model.Cluster, writer io.Writer) {
 		switch cluster.Status.Phase {
 		case constant.ClusterFailed:
 			cancel()
+			logger.Log.Errorf("cluster install failed: %s", cluster.Status.Message)
 			_ = c.messageService.SendMessage(constant.System, false, GetContent(constant.ClusterInstall, false, cluster.Status.Message), cluster.Name, constant.ClusterInstall)
 			return
 		case constant.ClusterRunning:
+			logger.Log.Infof("cluster %s install successful!", cluster.Name)
 			_ = c.messageService.SendMessage(constant.System, true, GetContent(constant.ClusterInstall, true, ""), cluster.Name, constant.ClusterInstall)
 			for i := range cluster.Nodes {
 				cluster.Spec.KubeRouter = cluster.Nodes[0].Host.Ip
@@ -122,7 +133,6 @@ func (c clusterInitService) do(cluster model.Cluster, writer io.Writer) {
 }
 
 func (c clusterInitService) doCreate(ctx context.Context, cluster adm.Cluster, statusChan chan adm.Cluster) {
-
 	ad := adm.NewClusterAdm()
 	for {
 		resp, err := ad.OnInitialize(cluster)

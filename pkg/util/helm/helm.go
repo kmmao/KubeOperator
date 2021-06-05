@@ -21,7 +21,6 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/getter"
@@ -34,8 +33,6 @@ import (
 const (
 	helmDriver = "configmap"
 )
-
-var log = logger.Default
 
 func nolog(format string, v ...interface{}) {}
 
@@ -97,10 +94,6 @@ func NewClient(config *Config) (*Client, error) {
 	return &client, nil
 }
 
-func LoadCharts(path string) (*chart.Chart, error) {
-	return loader.Load(path)
-}
-
 func (c Client) Install(name, chartName, chartVersion string, values map[string]interface{}) (*release.Release, error) {
 	if err := updateRepo(c.Architectures); err != nil {
 		return nil, err
@@ -114,14 +107,18 @@ func (c Client) Install(name, chartName, chartVersion string, values map[string]
 	}
 	p, err := client.ChartPathOptions.LocateChart(chartName, c.settings)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("locate chart %s failed: %v", chartName, err))
 	}
 	ct, err := loader.Load(p)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("load chart %s failed: %v", chartName, err))
 	}
 
-	return client.Run(ct, values)
+	release, err := client.Run(ct, values)
+	if err != nil {
+		return release, errors.Wrap(err, fmt.Sprintf("install tool %s with chart %s failed: %v", name, chartName, err))
+	}
+	return release, nil
 }
 
 func (c Client) Upgrade(name, chartName, chartVersion string, values map[string]interface{}) (*release.Release, error) {
@@ -135,25 +132,37 @@ func (c Client) Upgrade(name, chartName, chartVersion string, values map[string]
 	client.ChartPathOptions.Version = chartVersion
 	p, err := client.ChartPathOptions.LocateChart(chartName, c.settings)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("locate chart %s failed: %v", chartName, err))
 	}
 	ct, err := loader.Load(p)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("load chart %s failed: %v", chartName, err))
 	}
 
-	return client.Run(name, ct, values)
+	release, err := client.Run(name, ct, values)
+	if err != nil {
+		return release, errors.Wrap(err, fmt.Sprintf("upgrade tool %s with chart %s failed: %v", name, chartName, err))
+	}
+	return release, nil
 }
 
 func (c Client) Uninstall(name string) (*release.UninstallReleaseResponse, error) {
 	client := action.NewUninstall(c.unInstallActionConfig)
-	return client.Run(name)
+	release, err := client.Run(name)
+	if err != nil {
+		return release, errors.Wrap(err, fmt.Sprintf("uninstall tool %s failed: %v", name, err))
+	}
+	return release, nil
 }
 
 func (c Client) List() ([]*release.Release, error) {
 	client := action.NewList(c.unInstallActionConfig)
 	client.All = true
-	return client.Run()
+	release, err := client.Run()
+	if err != nil {
+		return release, errors.Wrap(err, fmt.Sprintf("list chart failed: %v", err))
+	}
+	return release, nil
 }
 
 func GetSettings() *cli.EnvSettings {
@@ -167,10 +176,14 @@ func GetSettings() *cli.EnvSettings {
 }
 
 func updateRepo(arch string) error {
-	repos, _ := ListRepo()
+	repos, err := ListRepo()
+	if err != nil {
+		logger.Log.Infof("list repo failed: %v, start reading from db repo", err)
+	}
 	flag := false
 	for _, r := range repos {
 		if r.Name == "nexus" {
+			logger.Log.Infof("my nexus addr is %s", r.URL)
 			flag = true
 		}
 	}
@@ -178,25 +191,26 @@ func updateRepo(arch string) error {
 		r := repository.NewSystemSettingRepository()
 		p, err := r.Get("REGISTRY_PROTOCOL")
 		if err != nil {
-			return errors.New("invalid local host ip")
+			return errors.Wrap(err, fmt.Sprintf("load system repo failed: %v", err))
 		}
 		var c Client
 		repoIP, err := c.GetRepoIP(arch)
 		if err != nil {
-			return err
+			return errors.Wrap(err, fmt.Sprintf("load system repo of arch %s failed: %v", arch, err))
 		}
-		err = addRepo("nexus", fmt.Sprintf("%s://%s:8081/repository/applications", p.Value, repoIP), "admin", "admin123")
+		url := fmt.Sprintf("%s://%s:8081/repository/applications", p.Value, repoIP)
+		err = addRepo("nexus", url, "admin", "admin123")
 		if err != nil {
-			log.Errorf("addRepo failed, error: %s", err.Error())
-			return err
+			return errors.Wrap(err, fmt.Sprintf("add helm repo %s failed: %v", url, err))
 		}
+		logger.Log.Infof("my nexus addr is %s", url)
 	}
 	settings := GetSettings()
 	repoFile := settings.RepositoryConfig
 	repoCache := settings.RepositoryCache
 	f, err := repo.LoadFile(repoFile)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("load file of repo %s failed: %v", repoFile, err))
 	}
 	var rps []*repo.ChartRepository
 	for _, cfg := range f.Repositories {
@@ -214,21 +228,21 @@ func updateRepo(arch string) error {
 }
 
 func updateCharts(repos []*repo.ChartRepository) {
-	log.Debug("Hang tight while we grab the latest from your chart repositories...")
+	logger.Log.Debug("Hang tight while we grab the latest from your chart repositories...")
 	var wg sync.WaitGroup
 	for _, re := range repos {
 		wg.Add(1)
 		go func(re *repo.ChartRepository) {
 			defer wg.Done()
 			if _, err := re.DownloadIndexFile(); err != nil {
-				log.Debugf("...Unable to get an update from the %q chart repository (%s):\n\t%s\n", re.Config.Name, re.Config.URL, err)
+				logger.Log.Debugf("...Unable to get an update from the %q chart repository (%s):\n\t%s\n", re.Config.Name, re.Config.URL, err)
 			} else {
-				log.Debugf("...Successfully got an update from the %q chart repository\n", re.Config.Name)
+				logger.Log.Debugf("...Successfully got an update from the %q chart repository\n", re.Config.Name)
 			}
 		}(re)
 	}
 	wg.Wait()
-	log.Debugf("Update Complete. ⎈ Happy Helming!⎈ ")
+	logger.Log.Debugf("Update Complete. ⎈ Happy Helming!⎈ ")
 }
 
 func addRepo(name string, url string, username string, password string) error {
@@ -248,7 +262,7 @@ func addRepo(name string, url string, username string, password string) error {
 	if err == nil && locked {
 		defer func() {
 			if err := fileLock.Unlock(); err != nil {
-				log.Errorf("addRepo fileLock.Unlock failed, error: %s", err.Error())
+				logger.Log.Errorf("addRepo fileLock.Unlock failed, error: %s", err.Error())
 			}
 		}()
 	}
@@ -314,7 +328,7 @@ func (c Client) GetRepoIP(arch string) (string, error) {
 		}
 		return repo.Hostname, nil
 	}
-	return "", fmt.Errorf("no such architecture")
+	return "", errors.New("no such architecture")
 }
 
 func ListRepo() ([]*repo.Entry, error) {

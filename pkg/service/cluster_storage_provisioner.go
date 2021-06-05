@@ -10,6 +10,7 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
 	"github.com/KubeOperator/KubeOperator/pkg/dto"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 	"github.com/KubeOperator/KubeOperator/pkg/model"
 	"github.com/KubeOperator/KubeOperator/pkg/repository"
 	"github.com/KubeOperator/KubeOperator/pkg/service/cluster/adm"
@@ -63,7 +64,7 @@ func (c clusterStorageProvisionerService) ListStorageProvisioner(clusterName str
 		return clusterStorageProvisionerDTOS, err
 	}
 	for _, p := range ps {
-		if p.Status != constant.StatusWaiting && p.Status != constant.StatusInitializing {
+		if p.Status == constant.StatusRunning || p.Status == constant.StatusFailed || p.Status == constant.StatusNotReady {
 			var syncModel dto.ClusterStorageProvisionerSync
 			syncModel.Name = p.Name
 			syncModel.Status = p.Status
@@ -108,13 +109,19 @@ func (c clusterStorageProvisionerService) CreateStorageProvisioner(clusterName s
 		Name:   creation.Name,
 		Type:   creation.Type,
 		Vars:   string(vars),
-		Status: constant.ClusterInitializing,
+		Status: constant.ClusterCreating,
 	}
 
 	cluster, err := c.clusterService.Get(clusterName)
 	if err != nil {
 		return dp, err
 	}
+	num := 0
+	_ = db.DB.Model(&model.ClusterStorageProvisioner{}).Where("name = ? AND type = ? AND cluster_id = ?", p.Name, p.Type, cluster.ID).Count(&num).Error
+	if num != 0 {
+		return dp, errors.New("PROVISIONER_EXSIT")
+	}
+
 	err = c.provisionerRepo.Save(clusterName, &p)
 	if err != nil {
 		return dp, err
@@ -130,7 +137,11 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 	admCluster := adm.NewCluster(cluster)
 	writer, err := ansible.CreateAnsibleLogWriterWithId(cluster.Name, provisioner.ID)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(err)
+	}
+	if err := db.DB.Model(&model.ClusterStorageProvisioner{}).Where("id = ?", provisioner.ID).Update("status", constant.ClusterInitializing).Error; err != nil {
+		c.errCreateStorageProvisioner(cluster.Name, provisioner, err)
+		return
 	}
 
 	// 获取创建参数
@@ -153,7 +164,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForDeployRunning("kube-system", provisioner.Name, client); err != nil {
@@ -167,7 +178,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForDeployRunning("rook-ceph", "rook-ceph-operator", client); err != nil {
@@ -181,7 +192,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForStatefulSetsRunning("kube-system", "vsphere-csi-controller", client); err != nil {
@@ -196,7 +207,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForDeployRunning("kube-system", "external-ceph", client); err != nil {
@@ -210,7 +221,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForDeployRunning("kube-system", "huawei-csi-controller", client); err != nil {
@@ -225,7 +236,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 		if err := phases.WaitForStatefulSetsRunning("kube-system", "csi-cinder-controllerplugin", client); err != nil {
@@ -240,7 +251,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 		}
 		provisioner.Status = constant.StatusWaiting
 		if err := c.provisionerRepo.Save(cluster.Name, &provisioner); err != nil {
-			log.Errorf("save provisioner status err: %s", err.Error())
+			logger.Log.Errorf("save provisioner status err: %s", err.Error())
 			return
 		}
 	}
@@ -249,7 +260,7 @@ func (c clusterStorageProvisionerService) do(cluster model.Cluster, provisioner 
 }
 
 func (c clusterStorageProvisionerService) errCreateStorageProvisioner(clusterName string, provisioner model.ClusterStorageProvisioner, err error) {
-	log.Errorf(err.Error())
+	logger.Log.Errorf(err.Error())
 	provisioner.Status = constant.ClusterFailed
 	provisioner.Message = err.Error()
 	_ = c.provisionerRepo.Save(clusterName, &provisioner)
@@ -263,7 +274,7 @@ func (c clusterStorageProvisionerService) SyncStorageProvisioner(clusterName str
 			continue
 		}
 		if err := db.DB.Model(&model.ClusterStorageProvisioner{}).Where("name = ?", provisioner.Name).Update("status", constant.ClusterSynchronizing).Error; err != nil {
-			log.Errorf("update host status to synchronizing error: %s", err.Error())
+			logger.Log.Errorf("update host status to synchronizing error: %s", err.Error())
 		}
 
 		wg.Add(1)
@@ -271,24 +282,24 @@ func (c clusterStorageProvisionerService) SyncStorageProvisioner(clusterName str
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			log.Infof("gather provisioner [%s] info", provisioner.Name)
+			logger.Log.Infof("gather provisioner [%s] info", provisioner.Name)
 			client, err := c.getBaseParam(clusterName)
 			if err != nil {
-				log.Errorf("get kubernetes Clientset err, error: %s", err.Error())
+				logger.Log.Errorf("get kubernetes Clientset err, error: %s", err.Error())
 			}
 			if err := c.sync(client, provisioner); err != nil {
-				log.Errorf("gather provisioner info error: %s", err.Error())
+				logger.Log.Errorf("gather provisioner info error: %s", err.Error())
 				if err := db.DB.Model(&model.ClusterStorageProvisioner{}).Where("name = ?", provisioner.Name).
 					Updates(map[string]interface{}{
 						"status":  constant.ClusterFailed,
 						"message": err.Error(),
 					}).Error; err != nil {
-					log.Errorf("update host status to failed error: %s", err.Error())
+					logger.Log.Errorf("update host status to failed error: %s", err.Error())
 				}
 			} else {
 				if err := db.DB.Model(&model.ClusterStorageProvisioner{}).Where("name = ?", provisioner.Name).
 					Updates(map[string]interface{}{"status": constant.ClusterRunning}).Error; err != nil {
-					log.Errorf("update host status to running error: %s", err.Error())
+					logger.Log.Errorf("update host status to running error: %s", err.Error())
 				}
 			}
 		}(provisioner)
@@ -525,7 +536,12 @@ func (c clusterStorageProvisionerService) getBaseParam(clusterName string) (*kub
 	if err != nil {
 		return client, err
 	}
+
 	endpoints, err := c.clusterService.GetApiServerEndpoints(clusterName)
+	if err != nil {
+		return client, err
+	}
+
 	client, err = kubernetesUtil.NewKubernetesClient(&kubernetesUtil.Config{
 		Token: secret.KubernetesToken,
 		Hosts: endpoints,

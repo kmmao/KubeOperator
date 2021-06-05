@@ -3,11 +3,14 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
-	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 	"math"
 	"net"
 	"time"
+
+	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
+	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
+	"github.com/sirupsen/logrus"
 
 	"github.com/KubeOperator/KubeOperator/pkg/util/ipaddr"
 	"github.com/pkg/errors"
@@ -129,11 +132,19 @@ func (c clusterService) List() ([]dto.Cluster, error) {
 
 func (c clusterService) Page(num, size int, user dto.SessionUser, conditions condition.Conditions) (*dto.ClusterPage, error) {
 	var (
-		page     dto.ClusterPage
-		clusters []model.Cluster
+		page             dto.ClusterPage
+		clusters         []model.Cluster
+		clusterResources []model.ProjectResource
+		projects         []model.Project
 	)
 	d := db.DB.Model(model.Cluster{})
 	if err := dbUtil.WithConditions(&d, model.Cluster{}, conditions); err != nil {
+		return nil, err
+	}
+	if err := db.DB.Where("resource_type = 'CLUSTER'").Find(&clusterResources).Error; err != nil {
+		return nil, err
+	}
+	if err := db.DB.Find(&projects).Error; err != nil {
 		return nil, err
 	}
 
@@ -148,23 +159,25 @@ func (c clusterService) Page(num, size int, user dto.SessionUser, conditions con
 		}
 	} else {
 		var (
-			project          model.Project
-			clusterIds       []string
-			projectResources []model.ProjectResource
+			clusterIds []string
+			resources  []model.ProjectResource
 		)
-		if err := db.DB.Where("name =?", user.CurrentProject).Find(&project).Error; err != nil {
-			return nil, err
-		}
-		if err := db.DB.Where("project_id = ? AND resource_type = 'CLUSTER'", project.ID).Find(&projectResources).Error; err != nil {
-			return nil, err
+		for _, pro := range projects {
+			if pro.Name == user.CurrentProject {
+				for _, res := range clusterResources {
+					if res.ProjectID == pro.ID {
+						resources = append(resources, res)
+					}
+				}
+			}
 		}
 		if user.IsRole(constant.RoleProjectManager) {
-			for _, pm := range projectResources {
+			for _, pm := range resources {
 				clusterIds = append(clusterIds, pm.ResourceID)
 			}
 		} else {
 			var resourceIds []string
-			for _, pm := range projectResources {
+			for _, pm := range resources {
 				resourceIds = append(resourceIds, pm.ResourceID)
 			}
 			var clusterMembers []model.ClusterMember
@@ -191,18 +204,29 @@ func (c clusterService) Page(num, size int, user dto.SessionUser, conditions con
 	}
 
 	for _, mo := range clusters {
-		clusterDTO := dto.Cluster{
-			Cluster:       mo,
-			NodeSize:      len(mo.Nodes),
-			Status:        mo.Status.Phase,
-			Provider:      mo.Spec.Provider,
-			PreStatus:     mo.Status.PrePhase,
-			Architectures: mo.Spec.Architectures,
+		for _, res := range clusterResources {
+			if mo.ID == res.ResourceID {
+				for _, pro := range projects {
+					if pro.ID == res.ProjectID {
+						clusterDTO := dto.Cluster{
+							Cluster:       mo,
+							ProjectName:   pro.Name,
+							NodeSize:      len(mo.Nodes),
+							Status:        mo.Status.Phase,
+							Provider:      mo.Spec.Provider,
+							PreStatus:     mo.Status.PrePhase,
+							Architectures: mo.Spec.Architectures,
+						}
+						if len(mo.MultiClusterRepositories) > 0 {
+							clusterDTO.MultiClusterRepository = mo.MultiClusterRepositories[0].Name
+						}
+						page.Items = append(page.Items, clusterDTO)
+						break
+					}
+				}
+				break
+			}
 		}
-		if len(mo.MultiClusterRepositories) > 0 {
-			clusterDTO.MultiClusterRepository = mo.MultiClusterRepositories[0].Name
-		}
-		page.Items = append(page.Items, clusterDTO)
 	}
 	return &page, nil
 }
@@ -272,6 +296,9 @@ var maxNodePodNumMap = map[int]int{
 }
 
 func (c clusterService) Create(creation dto.ClusterCreate) (*dto.Cluster, error) {
+	loginfo, _ := json.Marshal(creation)
+	logger.Log.WithFields(logrus.Fields{"cluster_creation": string(loginfo)}).Debugf("start to create the cluster %s", creation.Name)
+
 	cluster := model.Cluster{
 		Name:   creation.Name,
 		Source: constant.ClusterSourceLocal,
@@ -386,6 +413,17 @@ func (c clusterService) Create(creation dto.ClusterCreate) (*dto.Cluster, error)
 				tx.Rollback()
 				return nil, fmt.Errorf("can not update host %s cluster id ", nc.HostName)
 			}
+
+			clusterResource := model.ClusterResource{
+				ClusterID:    cluster.ID,
+				ResourceID:   host.ID,
+				ResourceType: constant.ResourceHost,
+			}
+			if err := tx.Create(&clusterResource).Error; err != nil {
+				tx.Rollback()
+				return nil, fmt.Errorf("can bind host %s to cluster", nc.HostName)
+			}
+
 			n.HostID = host.ID
 			if err := tx.Create(&n).Error; err != nil {
 				return nil, fmt.Errorf("can not create  node %s reason %s", n.Name, err.Error())
@@ -454,6 +492,8 @@ func (c clusterService) Create(creation dto.ClusterCreate) (*dto.Cluster, error)
 		}
 	}
 	tx.Commit()
+
+	logger.Log.Infof("init db data of cluster %s successful, now start to create cluster", cluster.Name)
 	if err := c.clusterInitService.Init(cluster.Name); err != nil {
 		return nil, err
 	}
@@ -491,6 +531,7 @@ func getServiceCIDRAndNodeCIDRMaskSize(clusterCIDR string, maxClusterServiceNum 
 }
 
 func (c *clusterService) Delete(name string, force bool) error {
+	logger.Log.Infof("start to delete cluster %s, isforce: %v", name, force)
 	cluster, err := c.Get(name)
 	if err != nil {
 		return fmt.Errorf("can not get cluster %s reason %s", name, err)
@@ -514,10 +555,8 @@ func (c *clusterService) Delete(name string, force bool) error {
 			}
 			switch cluster.Spec.Provider {
 			case constant.ClusterProviderBareMetal:
-				log.Infof("start uninstall cluster %s", cluster.Name)
 				go c.uninstallCluster(&cluster.Cluster, force)
 			case constant.ClusterProviderPlan:
-				log.Infof("start destroy cluster %s", cluster.Name)
 				go c.destroyCluster(&cluster.Cluster, force)
 			}
 		case constant.StatusCreating, constant.StatusInitializing:
@@ -534,23 +573,25 @@ func (c *clusterService) Delete(name string, force bool) error {
 	return nil
 }
 
-func (c *clusterService) errClusterDelete(cluster *model.Cluster, errStr string) {
+func (c *clusterService) errClusterDelete(cluster *model.Cluster, errStr error) {
+	logger.Log.Infof("cluster %s delete failed: %+v", cluster.Name, errStr)
 	cluster.Status.Phase = constant.ClusterFailed
-	cluster.Status.Message = errStr
+	cluster.Status.Message = errStr.Error()
 	if len(cluster.Status.ClusterStatusConditions) == 1 {
 		cluster.Status.ClusterStatusConditions[0].Status = constant.ConditionFalse
-		cluster.Status.ClusterStatusConditions[0].Message = errStr
+		cluster.Status.ClusterStatusConditions[0].Message = errStr.Error()
 	}
 	_ = c.clusterStatusRepo.Save(&cluster.Status)
-	_ = c.messageService.SendMessage(constant.System, false, GetContent(constant.ClusterUnInstall, false, errStr), cluster.Name, constant.ClusterUnInstall)
+	_ = c.messageService.SendMessage(constant.System, false, GetContent(constant.ClusterUnInstall, false, errStr.Error()), cluster.Name, constant.ClusterUnInstall)
 }
 
 const terminalPlaybookName = "99-reset-cluster.yml"
 
 func (c *clusterService) uninstallCluster(cluster *model.Cluster, force bool) {
+	logger.Log.Infof("start to uninstall cluster %s, isforce: %v", cluster.Name, force)
 	logId, writer, err := ansible.CreateAnsibleLogWriter(cluster.Name)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(err)
 	}
 	cluster.LogId = logId
 	_ = db.DB.Save(cluster)
@@ -574,27 +615,29 @@ func (c *clusterService) uninstallCluster(cluster *model.Cluster, force bool) {
 	}
 	err = phases.RunPlaybookAndGetResult(k, terminalPlaybookName, "", writer)
 	if err != nil {
-		log.Errorf("destroy cluster %s error %s", cluster.Name, err.Error())
 		if force {
+			logger.Log.Errorf("destroy cluster %s error %s", cluster.Name, err.Error())
 			if err := db.DB.Delete(&cluster).Error; err != nil {
-				log.Errorf("delete luster error %s", err.Error())
+				c.errClusterDelete(cluster, err)
 			}
-			return
+		} else {
+			c.errClusterDelete(cluster, err)
 		}
 		return
 	}
-	log.Infof("start clearing cluster data %s", cluster.Name)
+	_ = c.messageService.SendMessage(constant.System, true, GetContent(constant.ClusterUnInstall, true, ""), cluster.Name, constant.ClusterUnInstall)
+	logger.Log.Infof("start clearing cluster data %s", cluster.Name)
 	if err := db.DB.Delete(&cluster).Error; err != nil {
-		log.Errorf("delete luster error %s", err.Error())
+		logger.Log.Errorf("delete cluster error %s", err.Error())
 		return
 	}
-	_ = c.messageService.SendMessage(constant.System, true, GetContent(constant.ClusterUnInstall, true, ""), cluster.Name, constant.ClusterUnInstall)
 }
 
 func (c *clusterService) destroyCluster(cluster *model.Cluster, force bool) {
+	logger.Log.Infof("start to destroy cluster %s, isforce: %v", cluster.Name, force)
 	logId, _, err := ansible.CreateAnsibleLogWriter(cluster.Name)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(fmt.Sprintf("%+v", err))
 	}
 	cluster.LogId = logId
 	_ = db.DB.Save(cluster)
@@ -602,23 +645,22 @@ func (c *clusterService) destroyCluster(cluster *model.Cluster, force bool) {
 	k := kotf.NewTerraform(&kotf.Config{Cluster: cluster.Name})
 	_, err = k.Destroy()
 	if err != nil {
-		log.Errorf("destroy cluster %s error %s", cluster.Name, err.Error())
 		if force {
+			logger.Log.Errorf("destroy cluster %s error %s", cluster.Name, err.Error())
 			if err := db.DB.Delete(&cluster).Error; err != nil {
-				log.Errorf("delete luster error %s", err.Error())
+				c.errClusterDelete(cluster, err)
 			}
-			return
+		} else {
+			c.errClusterDelete(cluster, err)
 		}
 		return
 	}
-	log.Infof("start clearing cluster data %s", cluster.Name)
+	_ = c.messageService.SendMessage(constant.System, true, GetContent(constant.ClusterUnInstall, true, ""), cluster.Name, constant.ClusterUnInstall)
+	logger.Log.Infof("start clearing cluster data %s", cluster.Name)
 	if err := db.DB.Delete(&cluster).Error; err != nil {
-		log.Errorf("delete cluster error %s", err.Error())
-		c.errClusterDelete(cluster, "delete cluster err: "+err.Error())
+		c.errClusterDelete(cluster, err)
 		return
 	}
-	_ = c.messageService.SendMessage(constant.System, true, GetContent(constant.ClusterUnInstall, true, ""), cluster.Name, constant.ClusterUnInstall)
-	return
 }
 
 func (c clusterService) GetApiServerEndpoint(name string) (kubernetes.Host, error) {

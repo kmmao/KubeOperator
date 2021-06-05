@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/page"
 	"github.com/KubeOperator/KubeOperator/pkg/db"
@@ -51,6 +52,7 @@ func (p *projectMemberService) Page(projectName string, num, size int) (*page.Pa
 	err := db.DB.Model(&model.ProjectMember{}).
 		Where("project_id = ?", project.ID).
 		Preload("User").
+		Order("created_at desc").
 		Count(&pa.Total).
 		Offset((num - 1) * size).
 		Limit(size).
@@ -200,6 +202,10 @@ func (p *projectMemberService) Delete(name, projectName string) error {
 	}
 	if err := db.DB.Delete(&pm).Error; err != nil {
 		return err
+	}
+	if user.CurrentProjectID == project.ID {
+		user.User.CurrentProjectID = ""
+		db.DB.Save(&user.User)
 	}
 	return nil
 }

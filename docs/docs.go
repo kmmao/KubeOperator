@@ -80,14 +80,80 @@ var doc = `{
                 "summary": "Logout"
             }
         },
-        "/backupAccounts/": {
+        "/backupAccounts/{name}/": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "删除备份账号",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backupAccounts"
+                ],
+                "summary": "Delete a backupAccount",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "备份账号名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ]
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新备份账号",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backupAccounts"
+                ],
+                "summary": "Update a backupAccount",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.BackupAccountUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.BackupAccount"
+                        }
+                    }
+                }
+            }
+        },
+        "/backupaccounts/": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Show backupAccounts",
+                "description": "获取备份账号列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -113,7 +179,7 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "create a backupAccount",
+                "description": "创建备份账号",
                 "consumes": [
                     "application/json"
                 ],
@@ -143,53 +209,16 @@ var doc = `{
                         }
                     }
                 }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Update a credential",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "credentials"
-                ],
-                "summary": "Update a credential",
-                "parameters": [
-                    {
-                        "description": "request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.CredentialUpdate"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.Credential"
-                        }
-                    }
-                }
             }
         },
-        "/backupAccounts/{name}/": {
-            "delete": {
+        "/backupaccounts/search": {
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "delete a  backupAccount by name",
+                "description": "过滤备份账号",
                 "consumes": [
                     "application/json"
                 ],
@@ -199,33 +228,15 @@ var doc = `{
                 "tags": [
                     "backupAccounts"
                 ],
-                "summary": "Delete a backupAccount"
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Update a backupAccount",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "backupAccounts"
-                ],
-                "summary": "Update a backupAccount",
+                "summary": "Search backupAccount",
                 "parameters": [
                     {
-                        "description": "request",
-                        "name": "request",
+                        "description": "conditions",
+                        "name": "conditions",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.BackupAccountRequest"
+                            "$ref": "#/definitions/condition.Conditions"
                         }
                     }
                 ],
@@ -233,7 +244,7 @@ var doc = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.BackupAccount"
+                            "$ref": "#/definitions/page.Page"
                         }
                     }
                 }
@@ -297,7 +308,9 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "200": {}
+                    "200": {
+                        "description": ""
+                    }
                 }
             }
         },
@@ -331,7 +344,9 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "200": {}
+                    "200": {
+                        "description": ""
+                    }
                 }
             }
         },
@@ -643,7 +658,7 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "create a credential",
+                "description": "创建一个凭据",
                 "consumes": [
                     "application/json"
                 ],
@@ -673,6 +688,43 @@ var doc = `{
                         }
                     }
                 }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新单个凭据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "credentials"
+                ],
+                "summary": "Update a credential",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CredentialUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Credential"
+                        }
+                    }
+                }
             }
         },
         "/credentials/search": {
@@ -682,7 +734,7 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search  credential",
+                "description": "过滤凭据",
                 "consumes": [
                     "application/json"
                 ],
@@ -695,12 +747,12 @@ var doc = `{
                 "summary": "Search credential",
                 "parameters": [
                     {
-                        "description": "request",
-                        "name": "request",
+                        "description": "conditions",
+                        "name": "conditions",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.CredentialCreate"
+                            "$ref": "#/definitions/condition.Conditions"
                         }
                     }
                 ],
@@ -708,10 +760,30 @@ var doc = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.Credential"
+                            "$ref": "#/definitions/page.Page"
                         }
                     }
                 }
+            }
+        },
+        "/credentials/{name}/": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "通过名称删除单个凭据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "credentials"
+                ],
+                "summary": "Delete a credential"
             }
         },
         "/hosts/": {
@@ -969,6 +1041,52 @@ var doc = `{
                 }
             }
         },
+        "/ippools/{ipPoolName}/ips/{name}": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新 Ip",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ips"
+                ],
+                "summary": "Update a Ip",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.IpUpdate"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP池名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Ip"
+                        }
+                    }
+                }
+            }
+        },
         "/ippools/{name}": {
             "get": {
                 "security": [
@@ -1112,50 +1230,6 @@ var doc = `{
                         }
                     }
                 }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新 Ip",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ips"
-                ],
-                "summary": "Update a Ip",
-                "parameters": [
-                    {
-                        "description": "request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.IpUpdate"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "IP池名称",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.Ip"
-                        }
-                    }
-                }
             }
         },
         "/ippools/{name}/ips/{address}": {
@@ -1234,13 +1308,13 @@ var doc = `{
             }
         },
         "/logs/": {
-            "get": {
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Show system_logs",
+                "description": "过滤系统日志",
                 "consumes": [
                     "application/json"
                 ],
@@ -1250,12 +1324,100 @@ var doc = `{
                 "tags": [
                     "system_logs"
                 ],
-                "summary": "Show all system_logs",
+                "summary": "Search user",
+                "parameters": [
+                    {
+                        "description": "conditions",
+                        "name": "conditions",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/condition.Conditions"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/page.Page"
+                        }
+                    }
+                }
+            }
+        },
+        "/manifest": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取Kubernetes版本列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "manifest"
+                ],
+                "summary": "Show all manifest",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.ClusterManifestGroup"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/manifest/{name}": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新 Kubernetes 版本状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "manifest"
+                ],
+                "summary": "Update a manifest",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ClusterManifestUpdate"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Kubernetes 版本",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ClusterManifestUpdate"
                         }
                     }
                 }
@@ -1418,6 +1580,50 @@ var doc = `{
                     "plans"
                 ],
                 "summary": "Delete a plan"
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新部署计划",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Update a plan",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.PlanUpdate"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署计划名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Plan"
+                        }
+                    }
+                }
             }
         },
         "/projects": {
@@ -1548,7 +1754,9 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "200": {}
+                    "200": {
+                        "description": ""
+                    }
                 }
             },
             "patch": {
@@ -2404,6 +2612,376 @@ var doc = `{
                 }
             }
         },
+        "/settings": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取所有系统配置信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Show all SystemSettings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemSettingResult"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "创建一项配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Create a SystemSetting",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemSettingCreate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.SystemSetting"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/check/{name}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "检查配置是否可用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Check a SystemSetting",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemSettingCreate"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.SystemSetting"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/registry": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取所有仓库信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Show all Registry",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/page.Page"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "创建仓库配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Create a Registry",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemSettingCreate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemRegistry"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/registry/search": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "过滤仓库",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Search  Registry",
+                "parameters": [
+                    {
+                        "description": "conditions",
+                        "name": "conditions",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/condition.Conditions"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/page.Page"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/registry/{arch}": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新仓库配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Update a Registry",
+                "parameters": [
+                    {
+                        "description": "request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemRegistryUpdate"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "CPU 架构",
+                        "name": "arch",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemRegistry"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/registry/{arch}/": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "delete a  Registry by arch",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Delete a Registry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "CPU 架构",
+                        "name": "arch",
+                        "in": "path",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/settings/registry/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "根据 ID 获取仓库信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Show a Registry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemRegistry"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/{name}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取单个应用配置的配置信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemSetting"
+                ],
+                "summary": "Show a SystemSettings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemSettingResult"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [
@@ -3144,8 +3722,17 @@ var doc = `{
                 "credentialVars": {
                     "type": "object"
                 },
+                "id": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "string"
@@ -3175,6 +3762,45 @@ var doc = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.BackupAccountUpdate": {
+            "type": "object",
+            "required": [
+                "bucket",
+                "credentialVars",
+                "id",
+                "name",
+                "type"
+            ],
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "credentialVars": {
+                    "type": "object"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "type": {
                     "type": "string"
@@ -3222,6 +3848,9 @@ var doc = `{
                 "preStatus": {
                     "type": "string"
                 },
+                "projectName": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
@@ -3229,7 +3858,6 @@ var doc = `{
                     "type": "string"
                 },
                 "spec": {
-                    "type": "object",
                     "$ref": "#/definitions/model.ClusterSpec"
                 },
                 "status": {
@@ -3269,14 +3897,12 @@ var doc = `{
             ],
             "properties": {
                 "backupAccount": {
-                    "type": "object",
                     "$ref": "#/definitions/model.BackupAccount"
                 },
                 "clusterName": {
                     "type": "string"
                 },
                 "file": {
-                    "type": "object",
                     "$ref": "#/definitions/model.ClusterBackupFile"
                 },
                 "name": {
@@ -3448,6 +4074,78 @@ var doc = `{
                 }
             }
         },
+        "dto.ClusterManifest": {
+            "type": "object",
+            "properties": {
+                "coreVars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.NameVersion"
+                    }
+                },
+                "isActive": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networkVars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.NameVersion"
+                    }
+                },
+                "otherVars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.NameVersion"
+                    }
+                },
+                "storageVars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.NameVersion"
+                    }
+                },
+                "toolVars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.NameVersion"
+                    }
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ClusterManifestGroup": {
+            "type": "object",
+            "properties": {
+                "clusterManifests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ClusterManifest"
+                    }
+                },
+                "largeVersion": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ClusterManifestUpdate": {
+            "type": "object",
+            "properties": {
+                "isActive": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.ClusterMemberCreate": {
             "type": "object",
             "required": [
@@ -3516,6 +4214,26 @@ var doc = `{
                 "type",
                 "username"
             ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "privateKey": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.CredentialOfHostCreate": {
+            "type": "object",
             "properties": {
                 "name": {
                     "type": "string"
@@ -3636,12 +4354,12 @@ var doc = `{
             "required": [
                 "ip",
                 "name",
-                "port"
+                "port",
+                "project"
             ],
             "properties": {
                 "credential": {
-                    "type": "object",
-                    "$ref": "#/definitions/dto.CredentialCreate"
+                    "$ref": "#/definitions/dto.CredentialOfHostCreate"
                 },
                 "credentialId": {
                     "type": "string"
@@ -3654,6 +4372,9 @@ var doc = `{
                 },
                 "port": {
                     "type": "integer"
+                },
+                "project": {
+                    "type": "string"
                 }
             }
         },
@@ -3682,7 +4403,6 @@ var doc = `{
                     "type": "string"
                 },
                 "ipPool": {
-                    "type": "object",
                     "$ref": "#/definitions/model.IpPool"
                 },
                 "ipPoolId": {
@@ -3814,6 +4534,17 @@ var doc = `{
                 }
             }
         },
+        "dto.NameVersion": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.NodeCreate": {
             "type": "object",
             "properties": {
@@ -3843,10 +4574,19 @@ var doc = `{
                 "planVars": {
                     "type": "object"
                 },
-                "regionId": {
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "provider": {
                     "type": "string"
                 },
-                "regionName": {
+                "region": {
+                    "type": "string"
+                },
+                "regionId": {
                     "type": "string"
                 },
                 "updatedAt": {
@@ -3855,7 +4595,7 @@ var doc = `{
                 "vars": {
                     "type": "string"
                 },
-                "zoneNames": {
+                "zones": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -3900,6 +4640,24 @@ var doc = `{
                 }
             }
         },
+        "dto.PlanUpdate": {
+            "type": "object",
+            "required": [
+                "planVars",
+                "projects"
+            ],
+            "properties": {
+                "planVars": {
+                    "type": "object"
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "dto.Profile": {
             "type": "object",
             "properties": {
@@ -3907,7 +4665,6 @@ var doc = `{
                     "type": "string"
                 },
                 "user": {
-                    "type": "object",
                     "$ref": "#/definitions/dto.SessionUser"
                 }
             }
@@ -4158,6 +4915,107 @@ var doc = `{
                 }
             }
         },
+        "dto.SystemRegistry": {
+            "type": "object",
+            "properties": {
+                "architecture": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "hostname": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SystemRegistryUpdate": {
+            "type": "object",
+            "required": [
+                "hostname",
+                "id",
+                "protocol"
+            ],
+            "properties": {
+                "hostname": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SystemSetting": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "tab": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SystemSettingCreate": {
+            "type": "object",
+            "required": [
+                "tab",
+                "vars"
+            ],
+            "properties": {
+                "tab": {
+                    "type": "string"
+                },
+                "vars": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "dto.SystemSettingResult": {
+            "type": "object",
+            "required": [
+                "tab",
+                "vars"
+            ],
+            "properties": {
+                "tab": {
+                    "type": "string"
+                },
+                "vars": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "dto.User": {
             "type": "object",
             "properties": {
@@ -4329,7 +5187,6 @@ var doc = `{
             "type": "object",
             "properties": {
                 "_": {
-                    "type": "object",
                     "$ref": "#/definitions/model.IpPool"
                 },
                 "cloudVars": {
@@ -4345,7 +5202,6 @@ var doc = `{
                     "type": "string"
                 },
                 "ipPool": {
-                    "type": "object",
                     "$ref": "#/definitions/dto.IpPool"
                 },
                 "ipPoolId": {
@@ -4439,6 +5295,9 @@ var doc = `{
                     "type": "string"
                 },
                 "credential": {
+                    "type": "string"
+                },
+                "id": {
                     "type": "string"
                 },
                 "name": {

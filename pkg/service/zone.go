@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
-	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
+	dbUtil "github.com/KubeOperator/KubeOperator/pkg/util/db"
 
 	"github.com/KubeOperator/KubeOperator/pkg/cloud_provider"
 	"github.com/KubeOperator/KubeOperator/pkg/cloud_storage"
@@ -20,10 +22,6 @@ import (
 	"github.com/KubeOperator/KubeOperator/pkg/model"
 	"github.com/KubeOperator/KubeOperator/pkg/model/common"
 	"github.com/KubeOperator/KubeOperator/pkg/repository"
-)
-
-var (
-	ZoneNameExist = "NAME_EXISTS"
 )
 
 type ZoneService interface {
@@ -174,12 +172,12 @@ func (z zoneService) Create(creation dto.ZoneCreate) (*dto.Zone, error) {
 		old        model.Zone
 	)
 	if err := db.DB.Where("architecture = ?", constant.ArchitectureOfAMD64).First(&repo).Error; err != nil {
-		return nil, fmt.Errorf("Can't find local ip from system setting, err %s", err.Error())
+		return nil, errors.New("IP_NOT_EXISTS")
 	}
 
 	db.DB.Model(model.Zone{}).Where("name = ?", creation.Name).Find(&old)
 	if old.ID != "" {
-		return nil, errors.New(ZoneNameExist)
+		return nil, errors.New("NAME_EXISTS")
 	}
 
 	param := creation.CloudVars.(map[string]interface{})
@@ -361,18 +359,18 @@ func (z zoneService) ListTemplates(creation dto.CloudZoneRequest) ([]interface{}
 func (z zoneService) uploadZoneImage(creation dto.ZoneCreate) {
 	zone, err := z.zoneRepo.Get(creation.Name)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(err)
 	}
 	err = z.uploadImage(creation)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(err)
 		zone.Status = constant.UploadImageError
 	} else {
 		zone.Status = constant.Ready
 	}
 	err = z.zoneRepo.Save(&zone)
 	if err != nil {
-		log.Error(err)
+		logger.Log.Error(err)
 	}
 }
 
@@ -383,7 +381,7 @@ func (z zoneService) uploadImage(creation dto.ZoneCreate) error {
 	}
 	var repo model.SystemRegistry
 	if err := db.DB.Where("architecture = ?", constant.ArchitectureOfAMD64).First(&repo).Error; err != nil {
-		return fmt.Errorf("Can't find local ip from system setting, err %s", err.Error())
+		return fmt.Errorf("can't find local ip from system setting, err %s", err.Error())
 	}
 	ip := repo.Hostname
 
@@ -478,11 +476,11 @@ func (z zoneService) uploadImage(creation dto.ZoneCreate) error {
 			if err != nil {
 				return err
 			}
-			result, err = client.Upload(constant.FusionComputeOvfLocal, constant.FusionComputeOvfName)
+			_, err = client.Upload(constant.FusionComputeOvfLocal, constant.FusionComputeOvfName)
 			if err != nil {
 				return err
 			}
-			result, err = client.Upload(constant.FusionComputeVhdLocal, constant.FusionComputeVhdName)
+			_, err = client.Upload(constant.FusionComputeVhdLocal, constant.FusionComputeVhdName)
 			if err != nil {
 				return err
 			}

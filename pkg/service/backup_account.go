@@ -67,7 +67,7 @@ func (b backupAccountService) List(projectName string, conditions condition.Cond
 	}
 	if projectName == "" {
 		if err := d.Order("name").
-			Find(mos).Error; err != nil {
+			Find(&mos).Error; err != nil {
 			return nil, err
 		}
 	} else {
@@ -113,7 +113,9 @@ func (b backupAccountService) Page(num, size int, conditions condition.Condition
 		p                 page.Page
 		backupAccountDTOs []dto.BackupAccount
 		mos               []model.BackupAccount
+		projectResources  []model.ProjectResource
 	)
+
 	d := db.DB.Model(model.BackupAccount{})
 	if err := dbUtil.WithConditions(&d, model.BackupAccount{}, conditions); err != nil {
 		return nil, err
@@ -131,9 +133,18 @@ func (b backupAccountService) Page(num, size int, conditions condition.Condition
 		if err := json.Unmarshal([]byte(mo.Credential), &vars); err != nil {
 			return &p, err
 		}
+		if err := db.DB.Where("resource_id = ?", mo.ID).Preload("Project").Find(&projectResources).Error; err != nil {
+			return nil, err
+		}
+
+		var projects []string
+		for _, pr := range projectResources {
+			projects = append(projects, pr.Project.Name)
+		}
 		backupDTO := dto.BackupAccount{
 			CredentialVars: vars,
 			BackupAccount:  mo,
+			Projects:       projects,
 		}
 		backupAccountDTOs = append(backupAccountDTOs, backupDTO)
 	}
@@ -152,6 +163,7 @@ func (b backupAccountService) Create(creation dto.BackupAccountRequest) (*dto.Ba
 	if err != nil {
 		return nil, err
 	}
+	tx := db.DB.Begin()
 	credential, _ := json.Marshal(creation.CredentialVars)
 	backupAccount := model.BackupAccount{
 		Name:       creation.Name,
@@ -161,37 +173,84 @@ func (b backupAccountService) Create(creation dto.BackupAccountRequest) (*dto.Ba
 		Status:     constant.Valid,
 	}
 
-	err = b.backupAccountRepo.Save(&backupAccount)
+	err = tx.Create(&backupAccount).Error
 	if err != nil {
 		return nil, err
 	}
 
+	var backAccount []model.BackupAccount
+	err = tx.Where("name in (?)", creation.Name).Find(&backAccount).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	var projects []model.Project
+	err = tx.Where("name in (?)", creation.Projects).Find(&projects).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	for _, project := range projects {
+		err = tx.Create(&model.ProjectResource{
+			ResourceType: constant.ResourceBackupAccount,
+			ResourceID:   backupAccount.ID,
+			ProjectID:    project.ID,
+		}).Error
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	tx.Commit()
 	return &dto.BackupAccount{BackupAccount: backupAccount}, err
 }
 
-func (b backupAccountService) Update(name string, creation dto.BackupAccountUpdate) (*dto.BackupAccount, error) {
-
+func (b backupAccountService) Update(name string, update dto.BackupAccountUpdate) (*dto.BackupAccount, error) {
 	err := b.CheckValid(dto.BackupAccountRequest{
-		Name:           creation.Name,
-		Type:           creation.Type,
-		CredentialVars: creation.CredentialVars,
-		Bucket:         creation.Bucket,
+		Name:           update.Name,
+		Type:           update.Type,
+		CredentialVars: update.CredentialVars,
+		Bucket:         update.Bucket,
 	})
 	if err != nil {
 		return nil, err
 	}
-	credential, _ := json.Marshal(creation.CredentialVars)
+	var projects []model.Project
+	tx := db.DB.Begin()
+	err = tx.Where("name in (?)", update.Projects).Find(&projects).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Model(model.ProjectResource{}).Where("resource_id = ?", update.ID).Delete(&model.ProjectResource{}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	for _, project := range projects {
+		err = tx.Create(&model.ProjectResource{
+			ResourceType: constant.ResourceBackupAccount,
+			ResourceID:   update.ID,
+			ProjectID:    project.ID,
+		}).Error
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	credential, _ := json.Marshal(update.CredentialVars)
 	backupAccount := model.BackupAccount{
-		ID:         creation.ID,
+		ID:         update.ID,
 		Name:       name,
-		Bucket:     creation.Bucket,
-		Type:       creation.Type,
+		Bucket:     update.Bucket,
+		Type:       update.Type,
 		Credential: string(credential),
 		Status:     constant.Valid,
 	}
-	if err := db.DB.Save(&backupAccount).Error; err != nil {
+	if err := tx.Save(&backupAccount).Error; err != nil {
 		return nil, err
 	}
+	tx.Commit()
 	return &dto.BackupAccount{BackupAccount: backupAccount}, err
 }
 

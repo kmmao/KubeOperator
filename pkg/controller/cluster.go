@@ -2,8 +2,11 @@ package controller
 
 import (
 	"errors"
-	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	"fmt"
 	"io"
+
+	"github.com/KubeOperator/KubeOperator/pkg/controller/condition"
+	"github.com/KubeOperator/KubeOperator/pkg/logger"
 
 	"github.com/KubeOperator/KubeOperator/pkg/constant"
 	"github.com/KubeOperator/KubeOperator/pkg/controller/kolog"
@@ -156,6 +159,7 @@ func (c ClusterController) Post() (*dto.Cluster, error) {
 	}
 	item, err := c.ClusterService.Create(req)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 	operator := c.Ctx.Values().GetString("operator")
@@ -174,6 +178,7 @@ func (c ClusterController) PostUpgrade() error {
 	var req dto.ClusterUpgrade
 	err := c.Ctx.ReadJSON(&req)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return err
 	}
 
@@ -186,6 +191,7 @@ func (c ClusterController) PostUpgrade() error {
 func (c ClusterController) GetProvisionerBy(name string) ([]dto.ClusterStorageProvisioner, error) {
 	csp, err := c.ClusterStorageProvisionerService.ListStorageProvisioner(name)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 	return csp, nil
@@ -198,6 +204,7 @@ func (c ClusterController) PostProvisionerBy(name string) (*dto.ClusterStoragePr
 	}
 	p, err := c.ClusterStorageProvisionerService.CreateStorageProvisioner(name, req)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 
@@ -213,6 +220,7 @@ func (c ClusterController) PostProvisionerSyncBy(name string) error {
 		return err
 	}
 	if err := c.ClusterStorageProvisionerService.SyncStorageProvisioner(name, req); err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return err
 	}
 
@@ -229,6 +237,7 @@ func (c ClusterController) PostProvisionerSyncBy(name string) error {
 func (c ClusterController) PostProvisionerDeleteBy(clusterName string) error {
 	var item dto.ClusterStorageProvisioner
 	if err := c.Ctx.ReadJSON(&item); err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return err
 	}
 	operator := c.Ctx.Values().GetString("operator")
@@ -242,6 +251,10 @@ func (c ClusterController) PostProvisionerBatchBy(clusterName string) error {
 	if err := c.Ctx.ReadJSON(&batch); err != nil {
 		return err
 	}
+	if err := c.ClusterStorageProvisionerService.BatchStorageProvisioner(clusterName, batch); err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
+		return err
+	}
 
 	operator := c.Ctx.Values().GetString("operator")
 	delClus := ""
@@ -250,12 +263,13 @@ func (c ClusterController) PostProvisionerBatchBy(clusterName string) error {
 	}
 	go kolog.Save(operator, constant.DELETE_CLUSTER_STORAGE_SUPPLIER, clusterName+"-"+delClus)
 
-	return c.ClusterStorageProvisionerService.BatchStorageProvisioner(clusterName, batch)
+	return nil
 }
 
 func (c ClusterController) GetToolBy(clusterName string) ([]dto.ClusterTool, error) {
 	cts, err := c.ClusterToolService.List(clusterName)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 	return cts, nil
@@ -268,6 +282,7 @@ func (c ClusterController) PostToolEnableBy(clusterName string) (*dto.ClusterToo
 	}
 	cts, err := c.ClusterToolService.Enable(clusterName, req)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 
@@ -284,6 +299,7 @@ func (c ClusterController) PostToolUpgradeBy(clusterName string) (*dto.ClusterTo
 	}
 	cts, err := c.ClusterToolService.Upgrade(clusterName, req)
 	if err != nil {
+		logger.Log.Info(fmt.Sprintf("%+v", err))
 		return nil, err
 	}
 
@@ -520,10 +536,16 @@ func (c ClusterController) GetProvisionerLogBy(clusterName, logId string) (*Log,
 }
 
 func (c *ClusterController) GetHealthBy(clusterName string) (*dto.ClusterHealth, error) {
+	operator := c.Ctx.Values().GetString("operator")
+	go kolog.Save(operator, constant.HEALTH_CHECK, clusterName)
+
 	return c.ClusterHealthService.HealthCheck(clusterName)
 }
 
 func (c *ClusterController) PostRecoverBy(clusterName string) ([]dto.ClusterRecoverItem, error) {
+	operator := c.Ctx.Values().GetString("operator")
+	go kolog.Save(operator, constant.HEALTH_RECOVER, clusterName)
+
 	return c.ClusterHealthService.Recover(clusterName)
 }
 
